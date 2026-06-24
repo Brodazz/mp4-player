@@ -66,7 +66,15 @@ sola lettura, nessuna connessione di rete.
   anche con l'**AAC** (che VS Code non decodifica da solo). L'audio viene
   convertito in WAV temporaneo — l'unico formato che il motore di VS Code apre in
   modo affidabile — e messo in cache; per video molto lunghi i file temporanei
-  possono essere grandi.
+  possono essere grandi. La cache si **pulisce da sola** (file più vecchi di 7
+  giorni, e tetto massimo di 1 GB).
+
+## Piattaforme
+
+Pacchetti dedicati per **Windows (x64)**, **Linux (x64)**, **macOS Intel** e
+**macOS Apple Silicon**: l'audio funziona su tutti grazie a un `ffmpeg` incluso
+per ciascuna piattaforma. Il VS Code Marketplace scarica automaticamente il
+pacchetto giusto per il tuo sistema.
 
 ## Licenza
 

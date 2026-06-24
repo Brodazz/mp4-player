@@ -10,7 +10,21 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-13
+            target: darwin-x64
+          - os: macos-14
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,14 +34,20 @@ jobs:
           node-version: 20
           cache: npm
 
+      # npm ci scarica il binario ffmpeg del sistema su cui gira (quindi il
+      # target corretto), grazie alla matrice di runner Windows/Linux/macOS.
       - name: Install dependencies
         run: npm ci
 
       - name: Package VSIX
-        run: npx @vscode/vsce package --allow-missing-repository
+        run: npx @vscode/vsce package --target ${{ matrix.target }} -o mp4-player-${{ matrix.target }}.vsix
 
-      - name: Create GitHub Release with VSIX
+      - name: Publish to Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx @vscode/vsce publish --packagePath mp4-player-${{ matrix.target }}.vsix -p ${{ env.VSCE_PAT }}
+
+      - name: Attach VSIX to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "*.vsix"
+          files: mp4-player-${{ matrix.target }}.vsix
           generate_release_notes: true

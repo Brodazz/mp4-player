@@ -18,6 +18,8 @@ try {
 /** Punto di ingresso dell'estensione. */
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(Mp4EditorProvider.register(context));
+  // Pulizia della cache audio in background (non blocca l'avvio).
+  setTimeout(cleanupCache, 3000);
 }
 
 export function deactivate(): void {
@@ -313,8 +315,78 @@ function getTempDir(): string {
   return dir;
 }
 
+let ffmpegReady = false;
+
+/** Su macOS/Linux assicura che il binario ffmpeg abbia il permesso d'esecuzione. */
+function ensureFfmpegExecutable(): void {
+  if (ffmpegReady || !ffmpegPath) {
+    return;
+  }
+  ffmpegReady = true;
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(ffmpegPath, 0o755);
+    } catch {
+      /* ignora: potrebbe essere già eseguibile */
+    }
+  }
+}
+
 /**
- * Estrae e transcodifica la traccia audio in Opus (.ogg).
+ * Pulizia automatica della cache audio: elimina i file più vecchi di 7 giorni
+ * e, se la cartella supera 1 GB, rimuove i meno usati finché non rientra.
+ */
+function cleanupCache(): void {
+  try {
+    const dir = getTempDir();
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    const maxTotalBytes = 1024 * 1024 * 1024; // 1 GB
+    const now = Date.now();
+
+    let files = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith('.wav'))
+      .map((f) => {
+        const full = path.join(dir, f);
+        const st = fs.statSync(full);
+        return { full, size: st.size, mtime: st.mtimeMs };
+      });
+
+    // 1) elimina i file vecchi
+    files = files.filter((e) => {
+      if (now - e.mtime > maxAgeMs) {
+        try {
+          fs.unlinkSync(e.full);
+        } catch {
+          /* ignora */
+        }
+        return false;
+      }
+      return true;
+    });
+
+    // 2) limita la dimensione totale eliminando i meno recenti
+    files.sort((a, b) => a.mtime - b.mtime);
+    let total = files.reduce((sum, e) => sum + e.size, 0);
+    for (const e of files) {
+      if (total <= maxTotalBytes) {
+        break;
+      }
+      try {
+        fs.unlinkSync(e.full);
+        total -= e.size;
+      } catch {
+        /* ignora */
+      }
+    }
+  } catch {
+    /* la pulizia è best-effort */
+  }
+}
+
+/**
+ * Estrae e transcodifica la traccia audio in WAV (PCM) — l'unico formato che il
+ * motore di VS Code riproduce in modo affidabile.
  * Ritorna il percorso del file audio, oppure null se il video non ha audio.
  */
 async function prepareAudio(
@@ -324,6 +396,7 @@ async function prepareAudio(
   if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
     throw new Error('componente ffmpeg non disponibile su questa piattaforma');
   }
+  ensureFfmpegExecutable();
 
   const stat = await fs.promises.stat(srcPath);
   const key = createHash('sha1')
@@ -332,8 +405,14 @@ async function prepareAudio(
     .slice(0, 16);
   const outPath = path.join(tempDir, key + '.wav');
 
-  // Cache: se già transcodificato, riusa.
+  // Cache: se già transcodificato, riusa (e "tocca" il file per la logica LRU).
   if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
+    try {
+      const now = new Date();
+      fs.utimesSync(outPath, now, now);
+    } catch {
+      /* ignora */
+    }
     return outPath;
   }
 

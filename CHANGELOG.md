@@ -2,6 +2,20 @@
 
 Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 
+## [0.3.0] - 2026-06-24
+
+### Aggiunto
+- **Supporto multipiattaforma**: pacchetti dedicati per Windows (x64), Linux
+  (x64), macOS Intel e macOS Apple Silicon, ognuno con il proprio `ffmpeg`.
+  L'audio funziona quindi anche su macOS e Linux (build via CI).
+- **Pulizia automatica della cache audio**: all'avvio vengono eliminati i file
+  WAV temporanei più vecchi di 7 giorni e, se la cartella supera 1 GB, vengono
+  rimossi i meno usati finché non rientra.
+
+### Modificato
+- Permesso d'esecuzione del binario ffmpeg impostato automaticamente su
+  macOS/Linux.
+
 ## [0.2.0] - 2026-06-24
 
 ### Aggiunto
