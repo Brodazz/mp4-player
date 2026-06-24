@@ -1,5 +1,7 @@
 .github/**
 .vscode/**
+assets/icon-src.*
+assets/README.md
 src/**
 node_modules/**
 tsconfig.json
