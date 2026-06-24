@@ -2,7 +2,7 @@
   "name": "mp4-player",
   "displayName": "MP4 Player",
   "description": "Riproduce video .mp4 (video + audio) direttamente in una scheda dell'editor di VS Code.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
