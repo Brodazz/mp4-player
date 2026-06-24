@@ -1,0 +1,60 @@
+{
+  "name": "mp4-player",
+  "displayName": "MP4 Player",
+  "description": "Riproduce video .mp4 (video + audio) direttamente in una scheda dell'editor di VS Code.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "alessandrobroda",
+  "author": {
+    "name": "Alessandro Broda"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Brodazz/mp4-player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Brodazz/mp4-player/issues"
+  },
+  "homepage": "https://github.com/Brodazz/mp4-player#readme",
+  "keywords": [
+    "mp4",
+    "video",
+    "player",
+    "media",
+    "preview",
+    "h264"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "mp4Player.preview",
+        "displayName": "MP4 Player",
+        "selector": [
+          {
+            "filenamePattern": "*.mp4"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.4.0"
+  }
+}
