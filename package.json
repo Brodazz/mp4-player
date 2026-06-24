@@ -4,7 +4,7 @@
   "description": "Riproduce video .mp4 (video + audio) direttamente in una scheda dell'editor di VS Code.",
   "version": "0.1.0",
   "license": "MIT",
-  "publisher": "brodazz",
+  "publisher": "Brodazz",
   "author": {
     "name": "Alessandro Broda"
   },
