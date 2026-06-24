@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "license": "MIT",
   "publisher": "Brodazz",
+  "icon": "icon.png",
   "author": {
     "name": "Alessandro Broda"
   },
