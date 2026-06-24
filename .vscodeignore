@@ -3,7 +3,6 @@
 assets/icon-src.*
 assets/README.md
 src/**
-node_modules/**
 tsconfig.json
 .gitignore
 **/*.map

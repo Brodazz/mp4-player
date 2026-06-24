@@ -10,7 +10,10 @@ scrivere codice in un altro, dividendo l'editor — senza finestre esterne.
 ## Come funziona
 
 VS Code è basato su Electron (Chromium), quindi un tag HTML5 `<video>` in una
-Webview riproduce nativamente i file MP4 con codec **H.264 + AAC**, audio incluso.
+Webview riproduce il video **H.264** dei file MP4. Il motore di VS Code, però,
+non decodifica l'**audio AAC**: per questo l'estensione estrae la traccia audio
+e la transcodifica in locale (con un `ffmpeg` incluso) in un formato riproducibile,
+poi la riproduce **in sincrono** con il video. Tutto avviene offline, sul tuo PC.
 L'estensione registra un *Custom Editor* per i file `.mp4`.
 
 ## Installazione
@@ -57,9 +60,13 @@ sola lettura, nessuna connessione di rete.
 
 ## Codec supportati
 
-Funzionano i file MP4 con **H.264 (video) + AAC (audio)**, il formato più diffuso.
-Codec come **H.265/HEVC** o **AC-3** potrebbero non essere supportati dal motore
-di Chromium incluso in VS Code: in quel caso il player mostra un messaggio d'errore.
+- **Video**: **H.264** (il più diffuso). Codec come **H.265/HEVC** potrebbero non
+  essere supportati dal motore di VS Code: in quel caso il player mostra un errore.
+- **Audio**: gestito tramite transcodifica locale con `ffmpeg`, quindi funziona
+  anche con l'**AAC** (che VS Code non decodifica da solo). L'audio viene
+  convertito in WAV temporaneo — l'unico formato che il motore di VS Code apre in
+  modo affidabile — e messo in cache; per video molto lunghi i file temporanei
+  possono essere grandi.
 
 ## Licenza
 

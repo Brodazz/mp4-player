@@ -2,7 +2,7 @@
   "name": "mp4-player",
   "displayName": "MP4 Player",
   "description": "Riproduce video .mp4 (video + audio) direttamente in una scheda dell'editor di VS Code.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
@@ -51,6 +51,9 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.x",

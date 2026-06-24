@@ -2,6 +2,21 @@
 
 Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 
+## [0.2.0] - 2026-06-24
+
+### Aggiunto
+- **Audio funzionante** anche per i file con codec AAC, che il motore di VS Code
+  non decodifica nativamente. La traccia audio viene estratta e transcodificata
+  in locale con un `ffmpeg` incluso, poi riprodotta in sincrono con il video.
+- Badge "Preparazione audio…" durante la transcodifica; cache del risultato per
+  riaperture immediate.
+- Icona dell'estensione.
+
+### Note
+- L'audio transcodificato è in formato WAV (PCM): è l'unico che il motore di
+  VS Code riproduce in modo affidabile. I file temporanei possono quindi essere
+  grandi per video lunghi (vengono messi in cache nella cartella temporanea).
+
 ## [0.1.0] - 2026-06-24
 
 ### Aggiunto
