@@ -108,7 +108,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     ].join('; ');
 
     return /* html */ `<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
@@ -180,14 +180,14 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       <source src="${videoUri}" type="video/mp4" />
     </video>
     <div id="error" class="error">
-      Impossibile riprodurre questo video.<br />
-      Il codec video potrebbe non essere supportato dal motore di VS Code
-      (es. <code>H.265/HEVC</code>). Sono supportati i file MP4
-      con codec video <code>H.264</code>.
+      Unable to play this video.<br />
+      The video codec may not be supported by the VS Code engine
+      (e.g. <code>H.265/HEVC</code>). MP4 files with the
+      <code>H.264</code> video codec are supported.
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
-  <div id="status"><span class="spinner"></span><span id="statusText">Preparazione audio…</span></div>
+  <div id="status"><span class="spinner"></span><span id="statusText">Preparing audio…</span></div>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -200,7 +200,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     let useExternal = false;
     let nativeChecked = false;
 
-    showStatus('Preparazione audio…', true);
+    showStatus('Preparing audio…', true);
 
     // Errore di decodifica VIDEO → messaggio chiaro.
     player.addEventListener('error', showVideoError);
@@ -233,7 +233,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'noAudio') {
         hideStatus();
       } else if (msg.type === 'audioError') {
-        showStatus('Audio non disponibile: ' + msg.message, false);
+        showStatus('Audio unavailable: ' + msg.message, false);
         setTimeout(hideStatus, 7000);
       }
     });
@@ -394,7 +394,7 @@ async function prepareAudio(
   tempDir: string,
 ): Promise<string | null> {
   if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
-    throw new Error('componente ffmpeg non disponibile su questa piattaforma');
+    throw new Error('ffmpeg component not available on this platform');
   }
   ensureFfmpegExecutable();
 
@@ -447,7 +447,7 @@ async function prepareAudio(
     } catch {
       /* ignora */
     }
-    throw new Error('transcodifica audio fallita\n' + res.stderr.slice(-400));
+    throw new Error('audio transcoding failed\n' + res.stderr.slice(-400));
   }
 
   return outPath;
