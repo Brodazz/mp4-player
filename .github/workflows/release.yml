@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -68,8 +68,27 @@ jobs:
             exit $CODE
           fi
 
-      - name: Attach VSIX to GitHub Release
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: mp4-player-${{ matrix.target }}.vsix
+          retention-days: 1
+
+  # Un solo job finale crea la GitHub Release e allega tutti i .vsix: così si
+  # evita la race dei job in parallelo che scrivono la stessa release insieme.
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all VSIX
+        uses: actions/download-artifact@v4
+        with:
+          path: vsix
+          merge-multiple: true
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: mp4-player-${{ matrix.target }}.vsix
+          files: vsix/*.vsix
           generate_release_notes: true
