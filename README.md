@@ -1,8 +1,7 @@
 # Modern Video Player — with Audio for VS Code
 
-[![Version](https://img.shields.io/visual-studio-marketplace/v/Brodazz.mp4-player?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
+[![Version](https://badgen.net/vs-marketplace/v/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
+[![Installs](https://badgen.net/vs-marketplace/i/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 

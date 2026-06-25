@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.4] - 2026-06-25
+
+### Fixed
+- Marketplace badges in the README (version, installs) now use a supported
+  provider; the previous one had been retired and showed a broken badge.
+
 ## [0.5.3] - 2026-06-25
 
 ### Changed
