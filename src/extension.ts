@@ -27,7 +27,7 @@ export function deactivate(): void {
 }
 
 /**
- * Custom Editor in sola lettura per i file .mp4.
+ * Custom Editor in sola lettura per i file video (.mp4/.mov/.m4v).
  */
 class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
   private static readonly viewType = 'mp4Player.preview';
@@ -68,6 +68,14 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     let disposed = false;
     webviewPanel.onDidDispose(() => {
       disposed = true;
+    });
+
+    // La Fullscreen API è bloccata nei webview: il pulsante "fullscreen" chiede
+    // di attivare lo Zen Mode (schermo intero senza interfaccia).
+    webviewPanel.webview.onDidReceiveMessage((msg: { type?: string }) => {
+      if (msg && msg.type === 'toggleZen') {
+        vscode.commands.executeCommand('workbench.action.toggleZenMode');
+      }
     });
 
     // Prepara l'audio in background e lo comunica alla Webview.
@@ -113,7 +121,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MP4 Player</title>
+  <title>Video Player</title>
   <style>
     html, body {
       margin: 0;
@@ -130,6 +138,16 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       height: 100vh;
       width: 100vw;
     }
+    .wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    .wrap.idle { cursor: none; }
     video {
       max-width: 100%;
       max-height: 100%;
@@ -139,6 +157,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     audio { display: none; }
     .error {
       display: none;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
       color: #f48771;
       font-family: var(--vscode-font-family, sans-serif);
       font-size: 14px;
@@ -148,6 +170,141 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       padding: 24px;
     }
     .error code { color: #ccc; }
+
+    /* Barra di controlli custom, a comparsa */
+    .bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 4px 12px 10px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
+      font-family: var(--vscode-font-family, sans-serif);
+      color: #fff;
+      opacity: 1;
+      transition: opacity 0.25s ease;
+      z-index: 5;
+      user-select: none;
+    }
+    .bar.hidden { opacity: 0; pointer-events: none; }
+    .row { display: flex; align-items: center; gap: 4px; }
+    .ic {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .ic:hover { background: rgba(255, 255, 255, 0.18); }
+    .ic svg { width: 20px; height: 20px; display: block; }
+    .time {
+      font-size: 12px;
+      color: #eee;
+      margin: 0 8px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .spacer { flex: 1; }
+
+    /* Timeline */
+    .seek {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      margin: 4px 0 8px;
+      padding: 0;
+      border-radius: 2px;
+      cursor: pointer;
+      background-color: rgba(255, 255, 255, 0.25);
+      background-image: linear-gradient(#e84e4e, #e84e4e);
+      background-size: 0% 100%;
+      background-repeat: no-repeat;
+    }
+    .seek::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #e84e4e;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* Volume */
+    .vol {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 70px;
+      height: 4px;
+      padding: 0;
+      border-radius: 2px;
+      cursor: pointer;
+      background-color: rgba(255, 255, 255, 0.25);
+      background-image: linear-gradient(#fff, #fff);
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+    }
+    .vol::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* Velocità */
+    .speedWrap { position: relative; }
+    .speedbtn {
+      background: transparent;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 8px;
+      border-radius: 4px;
+      min-width: 40px;
+    }
+    .speedbtn:hover { background: rgba(255, 255, 255, 0.18); }
+    .speedmenu {
+      display: none;
+      position: absolute;
+      bottom: 40px;
+      right: 0;
+      background: rgba(28, 28, 28, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 4px;
+      min-width: 66px;
+    }
+    .speedmenu.open { display: block; }
+    .speedmenu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .speedmenu button:hover { background: rgba(255, 255, 255, 0.15); }
+    .speedmenu button.active { color: #e84e4e; font-weight: 700; }
+
+    /* Indicatore di stato (preparazione audio) */
     #status {
       position: fixed;
       top: 10px;
@@ -172,49 +329,41 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #speed {
-      position: fixed;
-      top: 10px;
-      left: 12px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #ddd;
-      font-family: var(--vscode-font-family, sans-serif);
-      font-size: 12px;
-      border: none;
-      border-radius: 6px;
-      padding: 5px 8px;
-      z-index: 10;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    body:hover #speed, #speed:focus { opacity: 1; outline: none; }
   </style>
 </head>
 <body>
   <div class="stage">
-    <video id="player" controls preload="metadata">
-      <source src="${videoUri}" type="video/mp4" />
-    </video>
-    <div id="error" class="error">
-      Unable to play this video.<br />
-      The video codec may not be supported by the VS Code engine
-      (e.g. <code>H.265/HEVC</code>). Supported: <code>H.264</code>
-      video (MP4/MOV/M4V).
+    <div id="wrap" class="wrap">
+      <video id="player" preload="metadata">
+        <source src="${videoUri}" type="video/mp4" />
+      </video>
+      <div id="error" class="error">
+        Unable to play this video.<br />
+        The video codec may not be supported by the VS Code engine
+        (e.g. <code>H.265/HEVC</code>). Supported: <code>H.264</code>
+        video (MP4/MOV/M4V).
+      </div>
+      <div id="bar" class="bar">
+        <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" />
+        <div class="row">
+          <button id="playBtn" class="ic" title="Play / Pause (Space)"></button>
+          <button id="backBtn" class="ic" title="Back 5s (←)"></button>
+          <button id="fwdBtn" class="ic" title="Forward 5s (→)"></button>
+          <span id="time" class="time">0:00 / 0:00</span>
+          <span class="spacer"></span>
+          <button id="muteBtn" class="ic" title="Mute (M)"></button>
+          <input id="vol" class="vol" type="range" min="0" max="1" step="0.05" value="1" />
+          <div class="speedWrap">
+            <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)">1×</button>
+            <div id="speedMenu" class="speedmenu"></div>
+          </div>
+          <button id="fsBtn" class="ic" title="Fullscreen (F)"></button>
+        </div>
+      </div>
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
   <div id="status"><span class="spinner"></span><span id="statusText">Preparing audio…</span></div>
-  <select id="speed" title="Playback speed">
-    <option value="0.25">0.25×</option>
-    <option value="0.5">0.5×</option>
-    <option value="0.75">0.75×</option>
-    <option value="1" selected>1×</option>
-    <option value="1.25">1.25×</option>
-    <option value="1.5">1.5×</option>
-    <option value="1.75">1.75×</option>
-    <option value="2">2×</option>
-  </select>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -222,11 +371,48 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const audio = document.getElementById('audio');
     const status = document.getElementById('status');
     const statusText = document.getElementById('statusText');
-    const speed = document.getElementById('speed');
+    const wrap = document.getElementById('wrap');
+    const bar = document.getElementById('bar');
+    const seek = document.getElementById('seek');
+    const playBtn = document.getElementById('playBtn');
+    const backBtn = document.getElementById('backBtn');
+    const fwdBtn = document.getElementById('fwdBtn');
+    const timeEl = document.getElementById('time');
+    const muteBtn = document.getElementById('muteBtn');
+    const vol = document.getElementById('vol');
+    const speedBtn = document.getElementById('speedBtn');
+    const speedMenu = document.getElementById('speedMenu');
+    const fsBtn = document.getElementById('fsBtn');
 
     let audioReady = false;
     let useExternal = false;
     let nativeChecked = false;
+    let seeking = false;
+
+    const IC = {
+      play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+      pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
+      back: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 6L5 12l6 6V6zm8 0l-6 6 6 6V6z"/></svg>',
+      forward: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 6l6 6-6 6V6zM5 6l6 6-6 6V6z"/></svg>',
+      volOn: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 8.5a4 4 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      volOff: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      fsIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+      fsOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+    };
+
+    playBtn.innerHTML = IC.play;
+    backBtn.innerHTML = IC.back;
+    fwdBtn.innerHTML = IC.forward;
+    muteBtn.innerHTML = IC.volOn;
+    fsBtn.innerHTML = IC.fsIn;
+
+    const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+    RATES.forEach((r) => {
+      const b = document.createElement('button');
+      b.textContent = r + '×';
+      b.setAttribute('data-rate', String(r));
+      speedMenu.appendChild(b);
+    });
 
     showStatus('Preparing audio…', true);
 
@@ -236,6 +422,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     if (source) { source.addEventListener('error', showVideoError); }
     function showVideoError() {
       player.style.display = 'none';
+      bar.style.display = 'none';
       error.style.display = 'block';
       hideStatus();
     }
@@ -272,12 +459,19 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       }
     }
 
-    // Il video è muto a livello pratico (l'AAC non viene decodificato),
-    // quindi usiamo i suoi controlli nativi per pilotare l'audio esterno.
+    // --- Sincronizzazione audio esterno + aggiornamento UI della barra ---
     player.addEventListener('play', () => {
       if (useExternal) { syncTime(); audio.play().catch(() => {}); }
+      playBtn.innerHTML = IC.pause;
+      showBar();
+      scheduleHide();
     });
-    player.addEventListener('pause', () => { if (useExternal) { audio.pause(); } });
+    player.addEventListener('pause', () => {
+      if (useExternal) { audio.pause(); }
+      playBtn.innerHTML = IC.play;
+      showBar();
+      cancelHide();
+    });
     player.addEventListener('seeking', () => { if (useExternal) { audio.pause(); } });
     player.addEventListener('seeked', () => {
       if (useExternal) {
@@ -287,16 +481,23 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     });
     player.addEventListener('ratechange', () => {
       audio.playbackRate = player.playbackRate;
-      const v = String(player.playbackRate);
-      if (speed.value !== v) { speed.value = v; }
+      reflectRate();
     });
     player.addEventListener('volumechange', () => {
       audio.volume = player.volume;
       audio.muted = player.muted;
+      const muted = player.muted || player.volume === 0;
+      muteBtn.innerHTML = muted ? IC.volOff : IC.volOn;
+      const v = player.muted ? 0 : player.volume;
+      vol.value = String(v);
+      vol.style.backgroundSize = (v * 100) + '% 100%';
     });
     player.addEventListener('timeupdate', () => {
       if (useExternal && !player.paused) { syncTime(); }
+      updateTime();
     });
+    player.addEventListener('loadedmetadata', updateTime);
+    player.addEventListener('durationchange', updateTime);
 
     // Se per caso il motore decodifica davvero l'audio nativo, evitiamo l'audio doppio.
     player.addEventListener('playing', () => {
@@ -310,37 +511,123 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       }, 1500);
     });
 
-    // Controllo velocità: imposta il rate del video; l'audio segue via 'ratechange'.
+    // --- Tempo / timeline ---
+    function fmt(t) {
+      if (!isFinite(t) || t < 0) { t = 0; }
+      t = Math.floor(t);
+      const m = Math.floor(t / 60);
+      const s = t % 60;
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    function updateTime() {
+      const d = player.duration || 0;
+      const c = player.currentTime || 0;
+      timeEl.textContent = fmt(c) + ' / ' + fmt(d);
+      const pct = d ? (c / d) * 100 : 0;
+      if (!seeking) { seek.value = String(Math.round(pct * 10)); }
+      seek.style.backgroundSize = pct + '% 100%';
+    }
+    seek.addEventListener('input', () => {
+      seeking = true;
+      const d = player.duration || 0;
+      const pct = parseFloat(seek.value) / 10;
+      player.currentTime = (pct / 100) * d;
+      seek.style.backgroundSize = pct + '% 100%';
+    });
+    seek.addEventListener('change', () => { seeking = false; });
+
+    // --- Pulsanti ---
+    function togglePlay() { player.paused ? player.play() : player.pause(); }
+    playBtn.addEventListener('click', togglePlay);
+    player.addEventListener('click', togglePlay);
+    backBtn.addEventListener('click', () => { player.currentTime -= 5; });
+    fwdBtn.addEventListener('click', () => { player.currentTime += 5; });
+    muteBtn.addEventListener('click', () => { player.muted = !player.muted; });
+    vol.addEventListener('input', () => {
+      player.muted = false;
+      player.volume = parseFloat(vol.value);
+    });
+
+    // --- Velocità ---
     function setRate(r) {
       r = Math.min(2, Math.max(0.25, Math.round(r * 100) / 100));
       player.playbackRate = r;
     }
-    speed.addEventListener('change', () => {
-      player.playbackRate = parseFloat(speed.value);
-      player.focus();
+    function reflectRate() {
+      speedBtn.textContent = player.playbackRate + '×';
+      speedMenu.querySelectorAll('button').forEach((b) => {
+        b.classList.toggle('active', parseFloat(b.getAttribute('data-rate')) === player.playbackRate);
+      });
+    }
+    speedBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      speedMenu.classList.toggle('open');
     });
+    speedMenu.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) { return; }
+      setRate(parseFloat(b.getAttribute('data-rate')));
+      speedMenu.classList.remove('open');
+    });
+    document.addEventListener('click', () => speedMenu.classList.remove('open'));
 
-    // Scorciatoie da tastiera comode mentre si lavora a fianco.
+    // --- Fullscreen ---
+    // La Fullscreen API è bloccata nei webview di VS Code, quindi usiamo lo
+    // "Zen Mode" dell'editor (schermo intero, nessuna interfaccia) via estensione.
+    const vscodeApi = acquireVsCodeApi();
+    let zen = false;
+    function toggleFs() {
+      vscodeApi.postMessage({ type: 'toggleZen' });
+      zen = !zen;
+      fsBtn.innerHTML = zen ? IC.fsOut : IC.fsIn;
+    }
+    fsBtn.addEventListener('click', toggleFs);
+
+    // --- Auto-hide della barra ---
+    let hideTimer = null;
+    function showBar() {
+      bar.classList.remove('hidden');
+      wrap.classList.remove('idle');
+    }
+    function hideBar() {
+      if (!player.paused && !speedMenu.classList.contains('open')) {
+        bar.classList.add('hidden');
+        wrap.classList.add('idle');
+      }
+    }
+    function scheduleHide() {
+      cancelHide();
+      hideTimer = setTimeout(hideBar, 2500);
+    }
+    function cancelHide() {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    }
+    wrap.addEventListener('mousemove', () => { showBar(); scheduleHide(); });
+    wrap.addEventListener('mouseleave', () => { if (!player.paused) { hideBar(); } });
+    bar.addEventListener('mouseenter', cancelHide);
+    bar.addEventListener('mouseleave', () => { if (!player.paused) { scheduleHide(); } });
+
+    // --- Scorciatoie da tastiera ---
     document.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') { return; }
       switch (e.key) {
         case ' ':
         case 'k':
           e.preventDefault();
-          player.paused ? player.play() : player.pause();
+          togglePlay();
           break;
         case 'ArrowRight': player.currentTime += 5; break;
         case 'ArrowLeft': player.currentTime -= 5; break;
         case 'ArrowUp':
           e.preventDefault();
+          player.muted = false;
           player.volume = Math.min(1, player.volume + 0.1);
           break;
         case 'ArrowDown':
           e.preventDefault();
           player.volume = Math.max(0, player.volume - 0.1);
           break;
-        case 'f':
-          if (player.requestFullscreen) { player.requestFullscreen(); }
-          break;
+        case 'f': toggleFs(); break;
         case 'm': player.muted = !player.muted; break;
         case '>':
           e.preventDefault();
@@ -352,6 +639,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           break;
       }
     });
+
+    // Stato iniziale dell'interfaccia.
+    reflectRate();
+    updateTime();
   </script>
 </body>
 </html>`;
@@ -435,8 +726,9 @@ function cleanupCache(): void {
 }
 
 /**
- * Estrae e transcodifica la traccia audio in MP3 — formato che il motore di
- * VS Code riproduce in modo affidabile e molto più leggero del WAV PCM.
+ * Estrae e transcodifica la traccia audio in MP3 — formato leggero che il motore
+ * di VS Code riproduce in modo affidabile. Se l'encoder MP3 non fosse disponibile
+ * su una piattaforma, ripiega automaticamente su WAV (sempre presente).
  * Ritorna il percorso del file audio, oppure null se il video non ha audio.
  */
 async function prepareAudio(
@@ -453,17 +745,19 @@ async function prepareAudio(
     .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
     .digest('hex')
     .slice(0, 16);
-  const outPath = path.join(tempDir, key + '.mp3');
 
-  // Cache: se già transcodificato, riusa (e "tocca" il file per la logica LRU).
-  if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
-    try {
-      const now = new Date();
-      fs.utimesSync(outPath, now, now);
-    } catch {
-      /* ignora */
+  // Cache: riusa un audio già transcodificato (MP3 preferito, WAV di fallback).
+  for (const ext of ['.mp3', '.wav']) {
+    const cached = path.join(tempDir, key + ext);
+    if (fs.existsSync(cached) && fs.statSync(cached).size > 0) {
+      try {
+        const now = new Date();
+        fs.utimesSync(cached, now, now);
+      } catch {
+        /* ignora */
+      }
+      return cached;
     }
-    return outPath;
   }
 
   // Verifica la presenza di una traccia audio.
@@ -473,36 +767,34 @@ async function prepareAudio(
     return null; // nessuna traccia audio: niente da riprodurre
   }
 
-  const res = await runFfmpeg([
-    '-y',
-    '-hide_banner',
-    '-i',
-    srcPath,
-    '-vn',
-    '-c:a',
-    'libmp3lame',
-    '-q:a',
-    '4',
-    '-ar',
-    '48000',
-    '-ac',
-    '2',
-    '-f',
-    'mp3',
-    outPath,
-  ]);
-
-  if (res.code !== 0 || !fs.existsSync(outPath)) {
-    // Pulisce eventuali file parziali.
-    try {
-      fs.unlinkSync(outPath);
-    } catch {
-      /* ignora */
+  // Esegue una transcodifica; ritorna il percorso se riesce, altrimenti null.
+  const tryEncode = async (
+    ext: string,
+    codecArgs: string[],
+  ): Promise<string | null> => {
+    const out = path.join(tempDir, key + ext);
+    const res = await runFfmpeg([
+      '-y', '-hide_banner', '-i', srcPath,
+      '-vn', ...codecArgs, '-ar', '48000', '-ac', '2', out,
+    ]);
+    if (res.code === 0 && fs.existsSync(out) && fs.statSync(out).size > 0) {
+      return out;
     }
-    throw new Error('audio transcoding failed\n' + res.stderr.slice(-400));
+    try { fs.unlinkSync(out); } catch { /* ignora */ }
+    return null;
+  };
+
+  // 1) MP3 leggero; 2) fallback WAV (PCM) se l'encoder MP3 manca/fallisce.
+  const mp3 = await tryEncode('.mp3', ['-c:a', 'libmp3lame', '-q:a', '4', '-f', 'mp3']);
+  if (mp3) {
+    return mp3;
+  }
+  const wav = await tryEncode('.wav', ['-c:a', 'pcm_s16le', '-f', 'wav']);
+  if (wav) {
+    return wav;
   }
 
-  return outPath;
+  throw new Error('audio transcoding failed');
 }
 
 function runFfmpeg(

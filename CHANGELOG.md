@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0] - 2026-06-25
+
+### Added
+- **Custom control bar**: a modern auto-hiding control bar inside the player
+  (native controls hidden) with play/pause, a seekable timeline, time, volume,
+  playback speed and fullscreen — appears on mouse move, fades out during playback.
+
+### Changed
+- **Search-optimized display name**: "Modern Video Player — with Audio (MP4,
+  MOV, M4V)", with richer keywords and description for Marketplace discovery.
+  The extension id stays `mp4-player`, so existing installs keep updating
+  normally.
+
 ## [0.4.0] - 2026-06-25
 
 ### Added

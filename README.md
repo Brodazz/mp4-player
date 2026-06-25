@@ -1,4 +1,4 @@
-# MP4 Player for VS Code
+# Modern Video Player — with Audio for VS Code
 
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -26,7 +26,9 @@ registers a *Custom Editor* for `.mp4`, `.mov` and `.m4v` files.
 ### Usage
 - Open a `.mp4`, `.mov` or `.m4v` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
-- Playback speed: use the selector at the top-left (it appears on hover) or the `<` / `>` keys.
+- A **custom control bar** appears at the bottom of the player on mouse move
+  (play/pause, seekable timeline, time, volume, playback speed, fullscreen) and
+  fades out during playback. Keyboard shortcuts work too (see below).
 
 ## Keyboard shortcuts
 

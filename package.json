@@ -1,8 +1,8 @@
 {
   "name": "mp4-player",
-  "displayName": "MP4 Player",
-  "description": "Play MP4, MOV and M4V videos (video + audio) directly in a VS Code editor tab.",
-  "version": "0.4.0",
+  "displayName": "Modern Video Player — with Audio (MP4, MOV, M4V)",
+  "description": "Modern video player with audio for VS Code: play MP4, MOV and M4V (video + sound) directly in an editor tab.",
+  "version": "0.5.0",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
@@ -18,13 +18,19 @@
   },
   "homepage": "https://github.com/Brodazz/mp4-player#readme",
   "keywords": [
+    "video player",
+    "mp4 player",
     "mp4",
     "mov",
     "m4v",
     "video",
     "player",
+    "audio",
+    "sound",
+    "play video",
     "media",
     "preview",
+    "quicktime",
     "h264"
   ],
   "engines": {
@@ -38,7 +44,7 @@
     "customEditors": [
       {
         "viewType": "mp4Player.preview",
-        "displayName": "MP4 Player",
+        "displayName": "Video Player",
         "selector": [
           {
             "filenamePattern": "*.mp4"
