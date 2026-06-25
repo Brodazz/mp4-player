@@ -1,42 +1,41 @@
 # Changelog
 
-Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
+All notable changes to this project are documented in this file.
 
 ## [0.3.0] - 2026-06-24
 
-### Aggiunto
-- **Supporto multipiattaforma**: pacchetti dedicati per Windows (x64), Linux
-  (x64), macOS Intel e macOS Apple Silicon, ognuno con il proprio `ffmpeg`.
-  L'audio funziona quindi anche su macOS e Linux (build via CI).
-- **Pulizia automatica della cache audio**: all'avvio vengono eliminati i file
-  WAV temporanei più vecchi di 7 giorni e, se la cartella supera 1 GB, vengono
-  rimossi i meno usati finché non rientra.
+### Added
+- **Cross-platform support**: dedicated packages for Windows (x64), Linux (x64),
+  macOS Intel and macOS Apple Silicon, each with its own `ffmpeg`. Audio
+  therefore works on macOS and Linux too (built via CI).
+- **Automatic audio cache cleanup**: on startup, temporary WAV files older than
+  7 days are deleted and, if the folder exceeds 1 GB, the least used ones are
+  removed until it fits again.
 
-### Modificato
-- Permesso d'esecuzione del binario ffmpeg impostato automaticamente su
-  macOS/Linux.
+### Changed
+- ffmpeg binary execute permission set automatically on macOS/Linux.
 
 ## [0.2.0] - 2026-06-24
 
-### Aggiunto
-- **Audio funzionante** anche per i file con codec AAC, che il motore di VS Code
-  non decodifica nativamente. La traccia audio viene estratta e transcodificata
-  in locale con un `ffmpeg` incluso, poi riprodotta in sincrono con il video.
-- Badge "Preparazione audio…" durante la transcodifica; cache del risultato per
-  riaperture immediate.
-- Icona dell'estensione.
+### Added
+- **Working audio** even for files with the AAC codec, which the VS Code engine
+  does not decode natively. The audio track is extracted and transcoded locally
+  with a bundled `ffmpeg`, then played in sync with the video.
+- "Preparing audio…" badge during transcoding; result caching for instant
+  reopens.
+- Extension icon.
 
-### Note
-- L'audio transcodificato è in formato WAV (PCM): è l'unico che il motore di
-  VS Code riproduce in modo affidabile. I file temporanei possono quindi essere
-  grandi per video lunghi (vengono messi in cache nella cartella temporanea).
+### Notes
+- The transcoded audio is in WAV (PCM) format: it is the only one the VS Code
+  engine plays reliably. The temporary files can therefore be large for long
+  videos (they are cached in the temporary folder).
 
 ## [0.1.0] - 2026-06-24
 
-### Aggiunto
-- Custom Editor che riproduce file `.mp4` (video + audio) in una scheda dell'editor.
-- Player HTML5 con controlli nativi: play/pausa, volume, timeline, schermo intero.
-- Scorciatoie da tastiera (spazio, frecce, `M`, `F`).
-- Messaggio d'errore chiaro per codec non supportati (es. H.265/HEVC).
-- Content-Security-Policy restrittiva con nonce crittografico e accesso ai file
-  limitato alla sola cartella del video.
+### Added
+- Custom Editor that plays `.mp4` files (video + audio) in an editor tab.
+- HTML5 player with native controls: play/pause, volume, timeline, fullscreen.
+- Keyboard shortcuts (space, arrows, `M`, `F`).
+- Clear error message for unsupported codecs (e.g. H.265/HEVC).
+- Restrictive Content-Security-Policy with a cryptographic nonce and file access
+  limited to the video's folder only.

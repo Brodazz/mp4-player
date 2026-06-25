@@ -1,81 +1,80 @@
-# MP4 Player per VS Code
+# MP4 Player for VS Code
 
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Estensione che riproduce video `.mp4` (video **e** audio) in una scheda dell'editor
-di Visual Studio Code. Puoi tenere il video aperto in un riquadro e continuare a
-scrivere codice in un altro, dividendo l'editor — senza finestre esterne.
+Extension that plays `.mp4` videos (video **and** audio) in a Visual Studio Code
+editor tab. You can keep the video open in one pane and keep writing code in
+another by splitting the editor — no external windows.
 
-## Come funziona
+## How it works
 
-VS Code è basato su Electron (Chromium), quindi un tag HTML5 `<video>` in una
-Webview riproduce il video **H.264** dei file MP4. Il motore di VS Code, però,
-non decodifica l'**audio AAC**: per questo l'estensione estrae la traccia audio
-e la transcodifica in locale (con un `ffmpeg` incluso) in un formato riproducibile,
-poi la riproduce **in sincrono** con il video. Tutto avviene offline, sul tuo PC.
-L'estensione registra un *Custom Editor* per i file `.mp4`.
+VS Code is built on Electron (Chromium), so an HTML5 `<video>` tag in a Webview
+plays the **H.264** video of MP4 files. The VS Code engine, however, does not
+decode **AAC audio**: that's why the extension extracts the audio track and
+transcodes it locally (with a bundled `ffmpeg`) into a playable format, then
+plays it **in sync** with the video. Everything happens offline, on your PC.
+The extension registers a *Custom Editor* for `.mp4` files.
 
-## Installazione
+## Installation
 
-### Da file `.vsix`
-1. Scarica il file `.vsix` (dalla pagina *Releases* o generandolo, vedi sotto).
-2. In VS Code: **Estensioni** (`Ctrl+Shift+X`) → menu `...` → *Install from VSIX...*
-3. Oppure da terminale: `code --install-extension mp4-player-0.1.0.vsix`
+### From a `.vsix` file
+1. Download the `.vsix` file (from the *Releases* page, or build it yourself, see below).
+2. In VS Code: **Extensions** (`Ctrl+Shift+X`) → `...` menu → *Install from VSIX...*
+3. Or from the terminal: `code --install-extension mp4-player-win32-x64.vsix`
 
-### Uso
-- Apri un file `.mp4` da Explorer: parte il player.
-- Per affiancare codice e video usa lo split dell'editor (`Ctrl+\` o trascina la tab).
+### Usage
+- Open a `.mp4` file from the Explorer: the player starts.
+- To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 
-## Scorciatoie da tastiera
+## Keyboard shortcuts
 
-| Tasto | Azione |
+| Key | Action |
 |---|---|
-| `Spazio` / `K` | Play / Pausa |
-| `←` / `→` | Indietro / Avanti 5s |
-| `↑` / `↓` | Volume su / giù |
-| `M` | Muto |
-| `F` | Schermo intero |
+| `Space` / `K` | Play / Pause |
+| `←` / `→` | Back / Forward 5s |
+| `↑` / `↓` | Volume up / down |
+| `M` | Mute |
+| `F` | Fullscreen |
 
-## Sviluppo
+## Development
 
 ```bash
 npm install
-npm run compile      # oppure: npm run watch
+npm run compile      # or: npm run watch
 ```
 
-Premi **F5** in VS Code per aprire la finestra *Extension Development Host* di prova.
+Press **F5** in VS Code to open the *Extension Development Host* test window.
 
-### Pacchettizzazione (.vsix)
+### Packaging (.vsix)
 
 ```bash
 npm run package
 ```
 
-## Sicurezza
+## Security
 
-Vedi [SECURITY.md](SECURITY.md). In breve: Content-Security-Policy restrittiva,
-nonce crittografico, accesso ai file limitato alla cartella del video, editor in
-sola lettura, nessuna connessione di rete.
+See [SECURITY.md](SECURITY.md). In short: restrictive Content-Security-Policy,
+cryptographic nonce, file access limited to the video's folder, read-only editor,
+no network connections.
 
-## Codec supportati
+## Supported codecs
 
-- **Video**: **H.264** (il più diffuso). Codec come **H.265/HEVC** potrebbero non
-  essere supportati dal motore di VS Code: in quel caso il player mostra un errore.
-- **Audio**: gestito tramite transcodifica locale con `ffmpeg`, quindi funziona
-  anche con l'**AAC** (che VS Code non decodifica da solo). L'audio viene
-  convertito in WAV temporaneo — l'unico formato che il motore di VS Code apre in
-  modo affidabile — e messo in cache; per video molto lunghi i file temporanei
-  possono essere grandi. La cache si **pulisce da sola** (file più vecchi di 7
-  giorni, e tetto massimo di 1 GB).
+- **Video**: **H.264** (the most common). Codecs such as **H.265/HEVC** may not
+  be supported by the VS Code engine: in that case the player shows an error.
+- **Audio**: handled via local transcoding with `ffmpeg`, so it works even with
+  **AAC** (which VS Code does not decode on its own). The audio is converted to a
+  temporary WAV file — the only format the VS Code engine plays reliably — and
+  cached; for very long videos the temporary files can be large. The cache
+  **cleans itself up** (files older than 7 days, and a 1 GB cap).
 
-## Piattaforme
+## Platforms
 
-Pacchetti dedicati per **Windows (x64)**, **Linux (x64)**, **macOS Intel** e
-**macOS Apple Silicon**: l'audio funziona su tutti grazie a un `ffmpeg` incluso
-per ciascuna piattaforma. Il VS Code Marketplace scarica automaticamente il
-pacchetto giusto per il tuo sistema.
+Dedicated packages for **Windows (x64)**, **Linux (x64)**, **macOS Intel** and
+**macOS Apple Silicon**: audio works on all of them thanks to a bundled `ffmpeg`
+for each platform. The VS Code Marketplace automatically downloads the right
+package for your system.
 
-## Licenza
+## License
 
 [MIT](LICENSE) © Alessandro Broda

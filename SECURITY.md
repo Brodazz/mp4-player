@@ -1,19 +1,19 @@
-# Politica di sicurezza
+# Security policy
 
-## Segnalare una vulnerabilità
+## Reporting a vulnerability
 
-Se trovi una vulnerabilità, apri una *issue* privata o scrivi all'autore.
-Cerca di includere passi per riprodurre il problema.
+If you find a vulnerability, open a private *issue* or contact the author.
+Please try to include steps to reproduce the problem.
 
-## Modello di sicurezza dell'estensione
+## Extension security model
 
-L'estensione mostra i video in una Webview di VS Code con misure restrittive:
+The extension shows videos in a VS Code Webview with restrictive measures:
 
-- **Content-Security-Policy** con `default-src 'none'`: nulla è caricato se non
-  esplicitamente consentito.
-- Gli script inline sono autorizzati solo tramite un **nonce crittografico**
-  generato con `crypto.randomBytes` a ogni apertura.
-- L'accesso al filesystem della Webview è limitato (`localResourceRoots`) alla
-  **sola cartella del video** aperto.
-- L'editor è in **sola lettura**: l'estensione non modifica i file.
-- Nessuna connessione di rete: il video è letto in streaming dal disco locale.
+- **Content-Security-Policy** with `default-src 'none'`: nothing is loaded unless
+  explicitly allowed.
+- Inline scripts are authorized only through a **cryptographic nonce** generated
+  with `crypto.randomBytes` on every open.
+- The Webview's filesystem access is limited (`localResourceRoots`) to the
+  **video's folder only**.
+- The editor is **read-only**: the extension does not modify files.
+- No network connections: the video is streamed from the local disk.
