@@ -2,7 +2,7 @@
   "name": "mp4-player",
   "displayName": "Modern Video Player — with Audio (MP4, MOV, M4V)",
   "description": "Modern video player with audio for VS Code — play MP4, MOV and M4V with sound out of the box. No ffmpeg to install, no server, fully offline.",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",

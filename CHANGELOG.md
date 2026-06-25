@@ -2,11 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.5.5] - 2026-06-25
+## [0.5.6] - 2026-06-25
 
 ### Changed
 - Re-added the Marketplace rating badge to the README now that ratings have
   propagated.
+- Smaller published package: README media (demo GIF, screenshot) are now
+  excluded from the VSIX — they are served from GitHub, not needed inside it.
 
 ## [0.5.4] - 2026-06-25
 

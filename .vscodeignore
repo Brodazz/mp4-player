@@ -2,6 +2,8 @@
 .vscode/**
 assets/icon-src.*
 assets/README.md
+assets/demo.gif
+assets/screenshot.png
 src/**
 tsconfig.json
 .gitignore
