@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-06-25
+
+### Added
+- **MOV and M4V support**: the player now also opens `.mov` and `.m4v` files
+  (H.264 video + AAC audio), using the same ffmpeg audio pipeline as MP4.
+- **Playback speed control** (0.25×–2×): selector at the top-left (shown on
+  hover) and `<` / `>` keyboard shortcuts. Video and audio change speed together.
+
+### Changed
+- **Audio transcoded to MP3** instead of WAV: roughly 1/15 of the size, lighter
+  cache and faster startup, with reliable playback in the VS Code webview.
+
 ## [0.3.0] - 2026-06-24
 
 ### Added

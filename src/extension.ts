@@ -6,8 +6,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Percorso del binario ffmpeg incluso (ffmpeg-static). Il motore di VS Code non
-// decodifica l'audio AAC degli MP4, quindi estraiamo/transcodifichiamo la traccia
-// audio in Opus (che la Webview riproduce) e la sincronizziamo col video.
+// decodifica l'audio AAC degli MP4/MOV/M4V, quindi estraiamo/transcodifichiamo la
+// traccia audio in MP3 (che la Webview riproduce) e la sincronizziamo col video.
 let ffmpegPath: string | undefined;
 try {
   ffmpegPath = require('ffmpeg-static') as string;
@@ -172,6 +172,23 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    #speed {
+      position: fixed;
+      top: 10px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #ddd;
+      font-family: var(--vscode-font-family, sans-serif);
+      font-size: 12px;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 8px;
+      z-index: 10;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    body:hover #speed, #speed:focus { opacity: 1; outline: none; }
   </style>
 </head>
 <body>
@@ -182,12 +199,22 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     <div id="error" class="error">
       Unable to play this video.<br />
       The video codec may not be supported by the VS Code engine
-      (e.g. <code>H.265/HEVC</code>). MP4 files with the
-      <code>H.264</code> video codec are supported.
+      (e.g. <code>H.265/HEVC</code>). Supported: <code>H.264</code>
+      video (MP4/MOV/M4V).
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
   <div id="status"><span class="spinner"></span><span id="statusText">Preparing audio…</span></div>
+  <select id="speed" title="Playback speed">
+    <option value="0.25">0.25×</option>
+    <option value="0.5">0.5×</option>
+    <option value="0.75">0.75×</option>
+    <option value="1" selected>1×</option>
+    <option value="1.25">1.25×</option>
+    <option value="1.5">1.5×</option>
+    <option value="1.75">1.75×</option>
+    <option value="2">2×</option>
+  </select>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -195,6 +222,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const audio = document.getElementById('audio');
     const status = document.getElementById('status');
     const statusText = document.getElementById('statusText');
+    const speed = document.getElementById('speed');
 
     let audioReady = false;
     let useExternal = false;
@@ -257,7 +285,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         if (!player.paused) { audio.play().catch(() => {}); }
       }
     });
-    player.addEventListener('ratechange', () => { audio.playbackRate = player.playbackRate; });
+    player.addEventListener('ratechange', () => {
+      audio.playbackRate = player.playbackRate;
+      const v = String(player.playbackRate);
+      if (speed.value !== v) { speed.value = v; }
+    });
     player.addEventListener('volumechange', () => {
       audio.volume = player.volume;
       audio.muted = player.muted;
@@ -276,6 +308,16 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           audio.pause();
         }
       }, 1500);
+    });
+
+    // Controllo velocità: imposta il rate del video; l'audio segue via 'ratechange'.
+    function setRate(r) {
+      r = Math.min(2, Math.max(0.25, Math.round(r * 100) / 100));
+      player.playbackRate = r;
+    }
+    speed.addEventListener('change', () => {
+      player.playbackRate = parseFloat(speed.value);
+      player.focus();
     });
 
     // Scorciatoie da tastiera comode mentre si lavora a fianco.
@@ -300,6 +342,14 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           if (player.requestFullscreen) { player.requestFullscreen(); }
           break;
         case 'm': player.muted = !player.muted; break;
+        case '>':
+          e.preventDefault();
+          setRate(player.playbackRate + 0.25);
+          break;
+        case '<':
+          e.preventDefault();
+          setRate(player.playbackRate - 0.25);
+          break;
       }
     });
   </script>
@@ -345,7 +395,7 @@ function cleanupCache(): void {
 
     let files = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.wav'))
+      .filter((f) => f.endsWith('.mp3') || f.endsWith('.wav'))
       .map((f) => {
         const full = path.join(dir, f);
         const st = fs.statSync(full);
@@ -385,8 +435,8 @@ function cleanupCache(): void {
 }
 
 /**
- * Estrae e transcodifica la traccia audio in WAV (PCM) — l'unico formato che il
- * motore di VS Code riproduce in modo affidabile.
+ * Estrae e transcodifica la traccia audio in MP3 — formato che il motore di
+ * VS Code riproduce in modo affidabile e molto più leggero del WAV PCM.
  * Ritorna il percorso del file audio, oppure null se il video non ha audio.
  */
 async function prepareAudio(
@@ -403,7 +453,7 @@ async function prepareAudio(
     .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
     .digest('hex')
     .slice(0, 16);
-  const outPath = path.join(tempDir, key + '.wav');
+  const outPath = path.join(tempDir, key + '.mp3');
 
   // Cache: se già transcodificato, riusa (e "tocca" il file per la logica LRU).
   if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) {
@@ -430,13 +480,15 @@ async function prepareAudio(
     srcPath,
     '-vn',
     '-c:a',
-    'pcm_s16le',
+    'libmp3lame',
+    '-q:a',
+    '4',
     '-ar',
     '48000',
     '-ac',
     '2',
     '-f',
-    'wav',
+    'mp3',
     outPath,
   ]);
 

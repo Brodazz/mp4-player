@@ -3,18 +3,18 @@
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extension that plays `.mp4` videos (video **and** audio) in a Visual Studio Code
-editor tab. You can keep the video open in one pane and keep writing code in
-another by splitting the editor — no external windows.
+Extension that plays `.mp4`, `.mov` and `.m4v` videos (video **and** audio) in a
+Visual Studio Code editor tab. You can keep the video open in one pane and keep
+writing code in another by splitting the editor — no external windows.
 
 ## How it works
 
 VS Code is built on Electron (Chromium), so an HTML5 `<video>` tag in a Webview
-plays the **H.264** video of MP4 files. The VS Code engine, however, does not
-decode **AAC audio**: that's why the extension extracts the audio track and
-transcodes it locally (with a bundled `ffmpeg`) into a playable format, then
-plays it **in sync** with the video. Everything happens offline, on your PC.
-The extension registers a *Custom Editor* for `.mp4` files.
+plays the **H.264** video of MP4/MOV/M4V files. The VS Code engine, however, does
+not decode **AAC audio**: that's why the extension extracts the audio track and
+transcodes it locally (with a bundled `ffmpeg`) into MP3, then plays it **in
+sync** with the video. Everything happens offline, on your PC. The extension
+registers a *Custom Editor* for `.mp4`, `.mov` and `.m4v` files.
 
 ## Installation
 
@@ -24,8 +24,9 @@ The extension registers a *Custom Editor* for `.mp4` files.
 3. Or from the terminal: `code --install-extension mp4-player-win32-x64.vsix`
 
 ### Usage
-- Open a `.mp4` file from the Explorer: the player starts.
+- Open a `.mp4`, `.mov` or `.m4v` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
+- Playback speed: use the selector at the top-left (it appears on hover) or the `<` / `>` keys.
 
 ## Keyboard shortcuts
 
@@ -34,6 +35,7 @@ The extension registers a *Custom Editor* for `.mp4` files.
 | `Space` / `K` | Play / Pause |
 | `←` / `→` | Back / Forward 5s |
 | `↑` / `↓` | Volume up / down |
+| `<` / `>` | Slower / Faster (0.25×–2×) |
 | `M` | Mute |
 | `F` | Fullscreen |
 
@@ -64,9 +66,8 @@ no network connections.
   be supported by the VS Code engine: in that case the player shows an error.
 - **Audio**: handled via local transcoding with `ffmpeg`, so it works even with
   **AAC** (which VS Code does not decode on its own). The audio is converted to a
-  temporary WAV file — the only format the VS Code engine plays reliably — and
-  cached; for very long videos the temporary files can be large. The cache
-  **cleans itself up** (files older than 7 days, and a 1 GB cap).
+  temporary MP3 file the VS Code engine plays reliably, then cached for instant
+  reopens. The cache **cleans itself up** (files older than 7 days, and a 1 GB cap).
 
 ## Platforms
 
