@@ -27,8 +27,8 @@ registers a *Custom Editor* for `.mp4`, `.mov` and `.m4v` files.
 - Open a `.mp4`, `.mov` or `.m4v` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 - A **custom control bar** appears at the bottom of the player on mouse move
-  (play/pause, seekable timeline, time, volume, playback speed, fullscreen) and
-  fades out during playback. Keyboard shortcuts work too (see below).
+  (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,
+  fullscreen) and fades out during playback. Keyboard shortcuts work too (see below).
 
 ## Keyboard shortcuts
 
@@ -39,6 +39,7 @@ registers a *Custom Editor* for `.mp4`, `.mov` and `.m4v` files.
 | `↑` / `↓` | Volume up / down |
 | `<` / `>` | Slower / Faster (0.25×–2×) |
 | `M` | Mute |
+| `P` | Picture-in-Picture |
 | `F` | Fullscreen |
 
 ## Development

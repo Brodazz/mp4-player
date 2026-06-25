@@ -357,6 +357,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
             <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)">1×</button>
             <div id="speedMenu" class="speedmenu"></div>
           </div>
+          <button id="pipBtn" class="ic" title="Picture-in-Picture (P)"></button>
           <button id="fsBtn" class="ic" title="Fullscreen (F)"></button>
         </div>
       </div>
@@ -382,6 +383,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const vol = document.getElementById('vol');
     const speedBtn = document.getElementById('speedBtn');
     const speedMenu = document.getElementById('speedMenu');
+    const pipBtn = document.getElementById('pipBtn');
     const fsBtn = document.getElementById('fsBtn');
 
     let audioReady = false;
@@ -397,14 +399,18 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       volOn: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 8.5a4 4 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       volOff: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       fsIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
-      fsOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+      fsOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+      pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg>'
     };
 
     playBtn.innerHTML = IC.play;
     backBtn.innerHTML = IC.back;
     fwdBtn.innerHTML = IC.forward;
     muteBtn.innerHTML = IC.volOn;
+    pipBtn.innerHTML = IC.pip;
     fsBtn.innerHTML = IC.fsIn;
+    // Picture-in-Picture: nascondi il pulsante se il webview non lo supporta.
+    if (!document.pictureInPictureEnabled) { pipBtn.style.display = 'none'; }
 
     const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
     RATES.forEach((r) => {
@@ -583,6 +589,20 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     }
     fsBtn.addEventListener('click', toggleFs);
 
+    // --- Picture-in-Picture (finestra video flottante; l'audio resta in sync) ---
+    async function togglePip() {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled) {
+          await player.requestPictureInPicture();
+        }
+      } catch (err) {
+        /* PiP non disponibile o negato: ignora */
+      }
+    }
+    pipBtn.addEventListener('click', togglePip);
+
     // --- Auto-hide della barra ---
     let hideTimer = null;
     function showBar() {
@@ -628,6 +648,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           player.volume = Math.max(0, player.volume - 0.1);
           break;
         case 'f': toggleFs(); break;
+        case 'p': togglePip(); break;
         case 'm': player.muted = !player.muted; break;
         case '>':
           e.preventDefault();

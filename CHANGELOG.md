@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.1] - 2026-06-25
+
+### Added
+- **Picture-in-Picture**: a button in the control bar (and the `P` key) pops the
+  video into a floating window; the external audio stays in sync.
+
 ## [0.5.0] - 2026-06-25
 
 ### Added
