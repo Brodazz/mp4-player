@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.3] - 2026-06-25
+
+### Changed
+- Maintenance release: hardened the release pipeline so re-publishing an
+  existing version no longer fails the build. No user-facing changes.
+
 ## [0.5.2] - 2026-06-25
 
 ### Changed
