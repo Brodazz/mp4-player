@@ -51,9 +51,22 @@ jobs:
       - name: Package VSIX
         run: npx @vscode/vsce package --target ${{ matrix.target }} -o mp4-player-${{ matrix.target }}.vsix
 
+      # Pubblica sul Marketplace. Se quel target+versione esiste già (es. re-run
+      # del workflow), lo trattiamo come successo invece di fallire il job.
       - name: Publish to Marketplace
         if: ${{ env.VSCE_PAT != '' }}
-        run: npx @vscode/vsce publish --packagePath mp4-player-${{ matrix.target }}.vsix -p ${{ env.VSCE_PAT }}
+        run: |
+          set +e
+          OUT=$(npx @vscode/vsce publish --packagePath mp4-player-${{ matrix.target }}.vsix -p "$VSCE_PAT" 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ $CODE -ne 0 ]; then
+            if echo "$OUT" | grep -qi "already exists"; then
+              echo "::notice::Questa versione per ${{ matrix.target }} è già pubblicata — ignoro."
+              exit 0
+            fi
+            exit $CODE
+          fi
 
       - name: Attach VSIX to GitHub Release
         uses: softprops/action-gh-release@v2
