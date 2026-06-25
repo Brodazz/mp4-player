@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.2] - 2026-06-25
+
+### Changed
+- **Marketplace listing**: added a screenshot, a "Why this one" section and a
+  comparison table highlighting the zero-setup, offline, secure approach.
+
 ## [0.5.1] - 2026-06-25
 
 ### Added

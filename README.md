@@ -1,11 +1,46 @@
 # Modern Video Player — with Audio for VS Code
 
+[![Version](https://img.shields.io/visual-studio-marketplace/v/Brodazz.mp4-player?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/Brodazz.mp4-player)](https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player)
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Extension that plays `.mp4`, `.mov` and `.m4v` videos (video **and** audio) in a
 Visual Studio Code editor tab. You can keep the video open in one pane and keep
 writing code in another by splitting the editor — no external windows.
+
+<!-- Media URLs must be absolute HTTPS (the Marketplace doesn't render relative paths),
+     so these point at the raw files on the main branch. -->
+![Video, code and AI side by side in VS Code](https://raw.githubusercontent.com/Brodazz/mp4-player/main/assets/demo.gif)
+
+*A modern workflow: a reference video (Modern Video Player), your code and your AI assistant — all at once, in VS Code.*
+
+![The player with its custom control bar](https://raw.githubusercontent.com/Brodazz/mp4-player/main/assets/screenshot.png)
+
+## Why this one
+
+Most video extensions for VS Code either **play MP4 without sound** (Chromium in
+VS Code can't decode AAC audio) or **make you install `ffmpeg` yourself**. This one
+just works: it **bundles `ffmpeg`**, so MP4/MOV/M4V play **with audio out of the
+box** — no setup, no local server, fully **offline**, in a single lightweight and
+secure extension.
+
+- 🔊 **Real audio** on MP4/MOV/M4V — even AAC, which VS Code can't decode on its own
+- ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
+- 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
+- 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), volume, Picture-in-Picture, fullscreen
+- 🪶 **Lightweight & focused** — does one thing, well
+- 🖥️ **Cross-platform** — Windows, Linux, macOS (Intel & Apple Silicon)
+
+| | This extension | Other VS Code video extensions |
+|---|:--:|:--:|
+| Audio on MP4/MOV (incl. AAC) | ✅ out of the box | ❌ silent — or ⚠️ only if you install ffmpeg |
+| Setup required | ✅ none (ffmpeg bundled) | ⚠️ often needs ffmpeg installed |
+| Network / local server | ✅ none — fully offline | ⚠️ some run a local HTTP server |
+| Footprint | 🪶 lightweight | 🐘 some ship large WASM decoders |
+| Security | 🔒 strict CSP, read-only, no network | varies |
+| Control bar (speed · PiP · fullscreen) | ✅ built-in | varies |
 
 ## How it works
 
