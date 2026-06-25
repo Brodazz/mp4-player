@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.5] - 2026-06-25
+
+### Changed
+- Re-added the Marketplace rating badge to the README now that ratings have
+  propagated.
+
 ## [0.5.4] - 2026-06-25
 
 ### Fixed
