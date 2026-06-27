@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.2] - 2026-06-27
+
+### Fixed
+- A TypeScript `.ts` file could open in the video player — the `.ts`/`.m2ts`/`.flv`
+  patterns were removed; the editor now handles `.mp4/.mov/.m4v/.mkv/.avi`.
+- Clearer messages: files over 1 GB now report "too large" instead of a
+  misleading "unsupported codec"; failed/partial transcodes are no longer served.
+- Opening the same file twice no longer races on the cache (atomic writes +
+  de-duplicated work); fixed a possible double-audio when native audio is present.
+
+### Added
+- **Remembers** your last volume and playback speed, and **resumes** each video
+  from where you left off.
+- **Double-click** to toggle fullscreen; **scroll-wheel** over the player changes volume.
+- Accessibility: focus outlines, ARIA labels on controls, live status/error regions.
+
 ## [0.6.1] - 2026-06-27
 
 ### Added

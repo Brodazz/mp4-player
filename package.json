@@ -1,8 +1,8 @@
 {
   "name": "mp4-player",
   "displayName": "Modern Video Player — with Audio (MP4, MKV, MOV)",
-  "description": "Modern video player with audio for VS Code — play MP4, MKV, MOV, M4V, AVI and TS with sound out of the box. No ffmpeg to install, no server, fully offline.",
-  "version": "0.6.1",
+  "description": "Play MP4, MKV, MOV, M4V and AVI videos with sound — right in a VS Code tab. Real audio (even AAC) with zero setup: ffmpeg is bundled (WebAssembly), no install, no local server, fully offline. Lightweight, secure, one universal package.",
+  "version": "0.6.2",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
@@ -20,16 +20,26 @@
   "keywords": [
     "video player",
     "mp4 player",
+    "mkv player",
+    "mov player",
+    "video preview",
+    "play video",
     "mp4",
+    "mkv",
     "mov",
     "m4v",
-    "mkv",
     "avi",
+    "matroska",
     "video",
     "player",
     "audio",
     "sound",
-    "play video",
+    "mp4 audio",
+    "video with sound",
+    "aac",
+    "ffmpeg",
+    "webassembly",
+    "wasm",
     "media",
     "preview",
     "quicktime",
@@ -41,6 +51,12 @@
   "categories": [
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#1E1E1E",
+    "theme": "dark"
+  },
+  "qna": "https://github.com/Brodazz/mp4-player/issues",
+  "pricing": "Free",
   "main": "./out/extension.js",
   "contributes": {
     "customEditors": [
@@ -62,15 +78,6 @@
           },
           {
             "filenamePattern": "*.avi"
-          },
-          {
-            "filenamePattern": "*.ts"
-          },
-          {
-            "filenamePattern": "*.m2ts"
-          },
-          {
-            "filenamePattern": "*.flv"
           }
         ],
         "priority": "default"

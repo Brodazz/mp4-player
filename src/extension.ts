@@ -10,6 +10,35 @@ import { FFmpeg } from '@ffmpeg.wasm/main';
 // ffmpeg compilato in WebAssembly (@ffmpeg.wasm), eseguito nell'extension host.
 // Un solo pacchetto universale, nessun binario nativo per piattaforma.
 
+/** Preferenze ripristinate all'apertura: volume/velocità globali, posizione per-file. */
+interface Prefs {
+  volume: number;
+  muted: boolean;
+  speed: number;
+  pos: number;
+}
+
+// Deduplica le elaborazioni concorrenti sullo stesso file (es. due tab dello
+// stesso video): non rieseguiamo il WASM né scriviamo la cache due volte.
+const pending = new Map<string, Promise<unknown>>();
+function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = pending.get(key) as Promise<T> | undefined;
+  if (existing) {
+    return existing;
+  }
+  const p = fn().finally(() => pending.delete(key));
+  pending.set(key, p);
+  return p;
+}
+
+/** Scrittura atomica: scrive su un file temporaneo e poi lo rinomina, così un
+ *  lettore concorrente non vede mai un file di cache troncato. */
+async function writeAtomic(dest: string, data: Buffer): Promise<void> {
+  const tmp = dest + '.' + randomBytes(4).toString('hex') + '.part';
+  await fs.promises.writeFile(tmp, data);
+  await fs.promises.rename(tmp, dest);
+}
+
 /** Punto di ingresso dell'estensione. */
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(Mp4EditorProvider.register(context));
@@ -57,22 +86,42 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       localResourceRoots: [fileDir, vscode.Uri.file(tempDir)],
     };
 
-    const ext = path.extname(document.uri.fsPath).toLowerCase();
+    const fsPath = document.uri.fsPath;
+    const ext = path.extname(fsPath).toLowerCase();
     const nativeContainer =
       ext === '.mp4' || ext === '.mov' || ext === '.m4v';
+
+    // Preferenze: volume/velocità globali + posizione di ripresa per-file.
+    const state = this.context.globalState;
+    const prefs: Prefs = {
+      volume: state.get<number>('pref.volume', 1),
+      muted: state.get<boolean>('pref.muted', false),
+      speed: state.get<number>('pref.speed', 1),
+      pos: state.get<number>('pos:' + fsPath, 0),
+    };
 
     let disposed = false;
     webviewPanel.onDidDispose(() => {
       disposed = true;
     });
 
-    // La Fullscreen API è bloccata nei webview: il pulsante "fullscreen" chiede
-    // di attivare lo Zen Mode (schermo intero senza interfaccia).
-    webviewPanel.webview.onDidReceiveMessage((msg: { type?: string }) => {
-      if (msg && msg.type === 'toggleZen') {
-        vscode.commands.executeCommand('workbench.action.toggleZenMode');
-      }
-    });
+    webviewPanel.webview.onDidReceiveMessage(
+      (msg: { type?: string; volume?: number; muted?: boolean; speed?: number; time?: number }) => {
+        if (!msg) {
+          return;
+        }
+        if (msg.type === 'toggleZen') {
+          // La Fullscreen API è bloccata nei webview → usiamo lo Zen Mode.
+          vscode.commands.executeCommand('workbench.action.toggleZenMode');
+        } else if (msg.type === 'prefs') {
+          if (typeof msg.volume === 'number') { state.update('pref.volume', msg.volume); }
+          if (typeof msg.muted === 'boolean') { state.update('pref.muted', msg.muted); }
+          if (typeof msg.speed === 'number') { state.update('pref.speed', msg.speed); }
+        } else if (msg.type === 'pos' && typeof msg.time === 'number') {
+          state.update('pos:' + fsPath, msg.time);
+        }
+      },
+    );
 
     const sendAudio = (audioPath: string | null): void => {
       if (disposed) {
@@ -94,8 +143,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     if (nativeContainer) {
       // MP4/MOV/M4V: il webview riproduce il file direttamente; estraiamo l'audio.
       const videoUri = webviewPanel.webview.asWebviewUri(document.uri);
-      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, videoUri);
-      prepareAudio(document.uri.fsPath, tempDir)
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, videoUri);
+      once('audio:' + fsPath, () => prepareAudio(fsPath, tempDir))
         .then(sendAudio)
         .catch((err: unknown) => {
           if (disposed) {
@@ -105,10 +154,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           webviewPanel.webview.postMessage({ type: 'audioError', message });
         });
     } else {
-      // MKV/AVI/TS/FLV: il webview non apre il contenitore. Rimuxiamo il video
-      // (H.264) in un MP4 temporaneo e lo inviamo, più l'audio in MP3.
-      webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
-      prepareRemux(document.uri.fsPath, tempDir)
+      // MKV/AVI: il webview non apre il contenitore. Rimuxiamo il video (H.264)
+      // in un MP4 temporaneo e lo inviamo, più l'audio in MP3.
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs);
+      once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir))
         .then((res) => {
           if (disposed) {
             return;
@@ -122,19 +171,26 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
               src: vUri.toString(),
             });
           } else {
-            webviewPanel.webview.postMessage({ type: 'videoError' });
+            webviewPanel.webview.postMessage({
+              type: 'videoError',
+              reason: res.tooLarge ? 'tooLarge' : 'failed',
+            });
           }
           sendAudio(res.audioPath);
         })
         .catch(() => {
           if (!disposed) {
-            webviewPanel.webview.postMessage({ type: 'videoError' });
+            webviewPanel.webview.postMessage({ type: 'videoError', reason: 'failed' });
           }
         });
     }
   }
 
-  private getHtml(webview: vscode.Webview, videoUri?: vscode.Uri): string {
+  private getHtml(
+    webview: vscode.Webview,
+    prefs: Prefs,
+    videoUri?: vscode.Uri,
+  ): string {
     const nonce = getNonce();
     const csp = [
       `default-src 'none'`,
@@ -358,6 +414,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .ic:focus-visible, .speedbtn:focus-visible, .seek:focus-visible,
+    .vol:focus-visible, .speedmenu button:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder, #0a84ff);
+      outline-offset: 1px;
+    }
   </style>
 </head>
 <body>
@@ -366,34 +427,34 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       <video id="player" preload="metadata">
         ${videoUri ? `<source src="${videoUri}" type="video/mp4" />` : ''}
       </video>
-      <div id="error" class="error">
+      <div id="error" class="error" role="alert">
         Unable to play this video.<br />
         The video codec may not be supported by the VS Code engine
         (e.g. <code>H.265/HEVC</code>, VP9). Supported: <code>H.264</code>
-        video in MP4/MOV/M4V/MKV/AVI/TS.
+        video in MP4/MOV/M4V/MKV/AVI.
       </div>
       <div id="bar" class="bar">
-        <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" />
+        <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" />
         <div class="row">
-          <button id="playBtn" class="ic" title="Play / Pause (Space)"></button>
-          <button id="backBtn" class="ic" title="Back 5s (←)"></button>
-          <button id="fwdBtn" class="ic" title="Forward 5s (→)"></button>
+          <button id="playBtn" class="ic" title="Play / Pause (Space)" aria-label="Play / Pause"></button>
+          <button id="backBtn" class="ic" title="Back 5s (←)" aria-label="Back 5 seconds"></button>
+          <button id="fwdBtn" class="ic" title="Forward 5s (→)" aria-label="Forward 5 seconds"></button>
           <span id="time" class="time">0:00 / 0:00</span>
           <span class="spacer"></span>
-          <button id="muteBtn" class="ic" title="Mute (M)"></button>
-          <input id="vol" class="vol" type="range" min="0" max="1" step="0.05" value="1" />
+          <button id="muteBtn" class="ic" title="Mute (M)" aria-label="Mute"></button>
+          <input id="vol" class="vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" />
           <div class="speedWrap">
-            <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)">1×</button>
+            <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)" aria-label="Playback speed">1×</button>
             <div id="speedMenu" class="speedmenu"></div>
           </div>
-          <button id="pipBtn" class="ic" title="Picture-in-Picture (P)"></button>
-          <button id="fsBtn" class="ic" title="Fullscreen (F)"></button>
+          <button id="pipBtn" class="ic" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture"></button>
+          <button id="fsBtn" class="ic" title="Fullscreen (F)" aria-label="Fullscreen"></button>
         </div>
       </div>
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
-  <div id="status"><span class="spinner"></span><span id="statusText">Preparing…</span></div>
+  <div id="status" aria-live="polite"><span class="spinner"></span><span id="statusText">Preparing…</span></div>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -418,7 +479,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     let audioReady = false;
     let useExternal = false;
     let nativeChecked = false;
+    let nativeAudioPresent = false;
     let seeking = false;
+    const vscodeApi = acquireVsCodeApi();
+    const SAVED = ${JSON.stringify(prefs)};
 
     const IC = {
       play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
@@ -473,6 +537,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     window.addEventListener('message', (e) => {
       const msg = e.data;
       if (msg.type === 'audioReady') {
+        // Se il motore ha già deciso che c'è audio nativo, non aggiungere quello
+        // esterno (eviteremmo l'audio doppio).
+        if (nativeAudioPresent) { hideStatus(); return; }
         audio.src = msg.src;
         audioReady = true;
         useExternal = true;
@@ -490,6 +557,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         player.src = msg.src;
         player.load();
       } else if (msg.type === 'videoError') {
+        if (msg.reason === 'tooLarge') {
+          error.innerHTML = 'This file is too large to play here (over 1&nbsp;GB).<br />Very large files are not processed in memory yet.';
+        }
         showVideoError();
       }
     });
@@ -512,6 +582,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       playBtn.innerHTML = IC.play;
       showBar();
       cancelHide();
+      vscodeApi.postMessage({ type: 'pos', time: player.currentTime || 0 });
     });
     player.addEventListener('seeking', () => { if (useExternal) { audio.pause(); } });
     player.addEventListener('seeked', () => {
@@ -523,6 +594,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     player.addEventListener('ratechange', () => {
       audio.playbackRate = player.playbackRate;
       reflectRate();
+      savePrefs();
     });
     player.addEventListener('volumechange', () => {
       audio.volume = player.volume;
@@ -532,13 +604,46 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       const v = player.muted ? 0 : player.volume;
       vol.value = String(v);
       vol.style.backgroundSize = (v * 100) + '% 100%';
+      savePrefs();
     });
     player.addEventListener('timeupdate', () => {
       if (useExternal && !player.paused) { syncTime(); }
       updateTime();
+      savePos();
     });
-    player.addEventListener('loadedmetadata', updateTime);
     player.addEventListener('durationchange', updateTime);
+
+    // Ripresa dalla posizione salvata + aggiornamento timeline a metadati pronti.
+    let resumed = false;
+    player.addEventListener('loadedmetadata', () => {
+      updateTime();
+      if (!resumed && SAVED.pos > 5 && SAVED.pos < (player.duration || 0) - 5) {
+        player.currentTime = SAVED.pos;
+      }
+      resumed = true;
+    });
+
+    // Salvataggi (debounce per le preferenze, throttle per la posizione).
+    let prefsTimer = null;
+    function savePrefs() {
+      clearTimeout(prefsTimer);
+      prefsTimer = setTimeout(() => {
+        vscodeApi.postMessage({
+          type: 'prefs',
+          volume: player.volume,
+          muted: player.muted,
+          speed: player.playbackRate,
+        });
+      }, 400);
+    }
+    let lastPosSent = -10;
+    function savePos() {
+      const t = player.currentTime || 0;
+      if (Math.abs(t - lastPosSent) >= 5) {
+        lastPosSent = t;
+        vscodeApi.postMessage({ type: 'pos', time: t });
+      }
+    }
 
     // Se per caso il motore decodifica davvero l'audio nativo, evitiamo l'audio doppio.
     player.addEventListener('playing', () => {
@@ -546,6 +651,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       nativeChecked = true;
       setTimeout(() => {
         if ((player.webkitAudioDecodedByteCount || 0) > 0) {
+          nativeAudioPresent = true;
           useExternal = false;
           audio.pause();
         }
@@ -580,7 +686,16 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     // --- Pulsanti ---
     function togglePlay() { player.paused ? player.play() : player.pause(); }
     playBtn.addEventListener('click', togglePlay);
-    player.addEventListener('click', togglePlay);
+    // Click sul video = play/pausa; doppio click = fullscreen (Zen).
+    let clickTimer = null;
+    player.addEventListener('click', () => {
+      if (clickTimer) { return; }
+      clickTimer = setTimeout(() => { clickTimer = null; togglePlay(); }, 220);
+    });
+    player.addEventListener('dblclick', () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      toggleFs();
+    });
     backBtn.addEventListener('click', () => { player.currentTime -= 5; });
     fwdBtn.addEventListener('click', () => { player.currentTime += 5; });
     muteBtn.addEventListener('click', () => { player.muted = !player.muted; });
@@ -615,7 +730,6 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     // --- Fullscreen ---
     // La Fullscreen API è bloccata nei webview di VS Code, quindi usiamo lo
     // "Zen Mode" dell'editor (schermo intero, nessuna interfaccia) via estensione.
-    const vscodeApi = acquireVsCodeApi();
     let zen = false;
     function toggleFs() {
       vscodeApi.postMessage({ type: 'toggleZen' });
@@ -659,6 +773,13 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     }
     wrap.addEventListener('mousemove', () => { showBar(); scheduleHide(); });
     wrap.addEventListener('mouseleave', () => { if (!player.paused) { hideBar(); } });
+    // Rotellina sul player = volume su/giù.
+    wrap.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      player.muted = false;
+      const step = e.deltaY < 0 ? 0.05 : -0.05;
+      player.volume = Math.min(1, Math.max(0, player.volume + step));
+    }, { passive: false });
     bar.addEventListener('mouseenter', cancelHide);
     bar.addEventListener('mouseleave', () => { if (!player.paused) { scheduleHide(); } });
 
@@ -696,7 +817,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       }
     });
 
-    // Stato iniziale dell'interfaccia.
+    // Stato iniziale: applica volume/velocità salvati (gli handler sincronizzano
+    // slider, icone e audio); la posizione si riprende a 'loadedmetadata'.
+    player.volume = SAVED.volume;
+    player.muted = SAVED.muted;
+    setRate(SAVED.speed);
     reflectRate();
     updateTime();
   </script>
@@ -810,7 +935,7 @@ async function prepareAudio(
   try {
     const inName = 'input' + path.extname(srcPath).toLowerCase();
     ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
-    await ffmpeg.run(
+    const code = await ffmpeg.run(
       '-i', inName, '-vn',
       '-c:a', 'libmp3lame', '-q:a', '4',
       '-ar', '48000', '-ac', '2',
@@ -822,9 +947,9 @@ async function prepareAudio(
     } catch {
       out = undefined;
     }
-    if (out && out.length > 0) {
+    if (code === 0 && out && out.length > 0) {
       const outPath = path.join(tempDir, key + '.mp3');
-      await fs.promises.writeFile(outPath, Buffer.from(out));
+      await writeAtomic(outPath, Buffer.from(out));
       return outPath;
     }
     return null; // nessuna traccia audio estraibile
@@ -838,7 +963,7 @@ async function prepareAudio(
 }
 
 /**
- * Per i contenitori che il webview non sa aprire (MKV/AVI/TS/FLV): rimuxa il
+ * Per i contenitori che il webview non sa aprire (MKV/AVI): rimuxa il
  * video (copia, senza ricodificare) in un MP4 temporaneo riproducibile ed estrae
  * l'audio in MP3, in un'unica esecuzione di ffmpeg-WASM. Il video è null se il
  * rimux non riesce o il file è troppo grande; l'audio è null se non c'è traccia.
@@ -846,7 +971,11 @@ async function prepareAudio(
 async function prepareRemux(
   srcPath: string,
   tempDir: string,
-): Promise<{ videoPath: string | null; audioPath: string | null }> {
+): Promise<{
+  videoPath: string | null;
+  audioPath: string | null;
+  tooLarge?: boolean;
+}> {
   const stat = await fs.promises.stat(srcPath);
   const key = createHash('sha1')
     .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
@@ -876,7 +1005,7 @@ async function prepareRemux(
   }
 
   if (stat.size > MAX_INPUT_BYTES) {
-    return { videoPath: null, audioPath: null };
+    return { videoPath: null, audioPath: null, tooLarge: true };
   }
 
   const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
@@ -884,7 +1013,7 @@ async function prepareRemux(
     const inName = 'input' + path.extname(srcPath).toLowerCase();
     ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
     // Un solo run: video copiato in MP4 (no re-encode, no audio) + audio in MP3.
-    await ffmpeg.run(
+    const code = await ffmpeg.run(
       '-i', inName,
       '-map', '0:v:0?', '-c:v', 'copy', '-an', 'video.mp4',
       '-map', '0:a:0?', '-c:a', 'libmp3lame', '-q:a', '4',
@@ -902,14 +1031,15 @@ async function prepareRemux(
     } catch {
       a = undefined;
     }
+    // Se ffmpeg è fallito (code != 0) non ci fidiamo di output parziali.
     let vp: string | null = null;
     let ap: string | null = null;
-    if (v && v.length > 0) {
-      await fs.promises.writeFile(videoPath, Buffer.from(v));
+    if (code === 0 && v && v.length > 0) {
+      await writeAtomic(videoPath, Buffer.from(v));
       vp = videoPath;
     }
-    if (a && a.length > 0) {
-      await fs.promises.writeFile(audioPath, Buffer.from(a));
+    if (code === 0 && a && a.length > 0) {
+      await writeAtomic(audioPath, Buffer.from(a));
       ap = audioPath;
     }
     return { videoPath: vp, audioPath: ap };
