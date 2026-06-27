@@ -57,8 +57,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       localResourceRoots: [fileDir, vscode.Uri.file(tempDir)],
     };
 
-    const videoUri = webviewPanel.webview.asWebviewUri(document.uri);
-    webviewPanel.webview.html = this.getHtml(webviewPanel.webview, videoUri);
+    const ext = path.extname(document.uri.fsPath).toLowerCase();
+    const nativeContainer =
+      ext === '.mp4' || ext === '.mov' || ext === '.m4v';
 
     let disposed = false;
     webviewPanel.onDidDispose(() => {
@@ -73,34 +74,67 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       }
     });
 
-    // Prepara l'audio in background e lo comunica alla Webview.
-    prepareAudio(document.uri.fsPath, tempDir)
-      .then((outPath) => {
-        if (disposed) {
-          return;
-        }
-        if (outPath === null) {
-          webviewPanel.webview.postMessage({ type: 'noAudio' });
-        } else {
-          const audioUri = webviewPanel.webview.asWebviewUri(
-            vscode.Uri.file(outPath),
-          );
-          webviewPanel.webview.postMessage({
-            type: 'audioReady',
-            src: audioUri.toString(),
-          });
-        }
-      })
-      .catch((err: unknown) => {
-        if (disposed) {
-          return;
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        webviewPanel.webview.postMessage({ type: 'audioError', message });
-      });
+    const sendAudio = (audioPath: string | null): void => {
+      if (disposed) {
+        return;
+      }
+      if (audioPath === null) {
+        webviewPanel.webview.postMessage({ type: 'noAudio' });
+      } else {
+        const audioUri = webviewPanel.webview.asWebviewUri(
+          vscode.Uri.file(audioPath),
+        );
+        webviewPanel.webview.postMessage({
+          type: 'audioReady',
+          src: audioUri.toString(),
+        });
+      }
+    };
+
+    if (nativeContainer) {
+      // MP4/MOV/M4V: il webview riproduce il file direttamente; estraiamo l'audio.
+      const videoUri = webviewPanel.webview.asWebviewUri(document.uri);
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, videoUri);
+      prepareAudio(document.uri.fsPath, tempDir)
+        .then(sendAudio)
+        .catch((err: unknown) => {
+          if (disposed) {
+            return;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          webviewPanel.webview.postMessage({ type: 'audioError', message });
+        });
+    } else {
+      // MKV/AVI/TS/FLV: il webview non apre il contenitore. Rimuxiamo il video
+      // (H.264) in un MP4 temporaneo e lo inviamo, più l'audio in MP3.
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
+      prepareRemux(document.uri.fsPath, tempDir)
+        .then((res) => {
+          if (disposed) {
+            return;
+          }
+          if (res.videoPath) {
+            const vUri = webviewPanel.webview.asWebviewUri(
+              vscode.Uri.file(res.videoPath),
+            );
+            webviewPanel.webview.postMessage({
+              type: 'videoReady',
+              src: vUri.toString(),
+            });
+          } else {
+            webviewPanel.webview.postMessage({ type: 'videoError' });
+          }
+          sendAudio(res.audioPath);
+        })
+        .catch(() => {
+          if (!disposed) {
+            webviewPanel.webview.postMessage({ type: 'videoError' });
+          }
+        });
+    }
   }
 
-  private getHtml(webview: vscode.Webview, videoUri: vscode.Uri): string {
+  private getHtml(webview: vscode.Webview, videoUri?: vscode.Uri): string {
     const nonce = getNonce();
     const csp = [
       `default-src 'none'`,
@@ -330,13 +364,13 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
   <div class="stage">
     <div id="wrap" class="wrap">
       <video id="player" preload="metadata">
-        <source src="${videoUri}" type="video/mp4" />
+        ${videoUri ? `<source src="${videoUri}" type="video/mp4" />` : ''}
       </video>
       <div id="error" class="error">
         Unable to play this video.<br />
         The video codec may not be supported by the VS Code engine
-        (e.g. <code>H.265/HEVC</code>). Supported: <code>H.264</code>
-        video (MP4/MOV/M4V).
+        (e.g. <code>H.265/HEVC</code>, VP9). Supported: <code>H.264</code>
+        video in MP4/MOV/M4V/MKV/AVI/TS.
       </div>
       <div id="bar" class="bar">
         <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" />
@@ -359,7 +393,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
-  <div id="status"><span class="spinner"></span><span id="statusText">Preparing audio…</span></div>
+  <div id="status"><span class="spinner"></span><span id="statusText">Preparing…</span></div>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -415,7 +449,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       speedMenu.appendChild(b);
     });
 
-    showStatus('Preparing audio…', true);
+    showStatus('Preparing…', true);
 
     // Errore di decodifica VIDEO → messaggio chiaro.
     player.addEventListener('error', showVideoError);
@@ -451,6 +485,12 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'audioError') {
         showStatus('Audio unavailable: ' + msg.message, false);
         setTimeout(hideStatus, 7000);
+      } else if (msg.type === 'videoReady') {
+        // Contenitore rimuxato (MKV/AVI/…): la sorgente arriva qui, asincrona.
+        player.src = msg.src;
+        player.load();
+      } else if (msg.type === 'videoError') {
+        showVideoError();
       }
     });
 
@@ -685,7 +725,9 @@ function cleanupCache(): void {
 
     let files = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.mp3') || f.endsWith('.wav'))
+      .filter(
+        (f) => f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.mp4'),
+      )
       .map((f) => {
         const full = path.join(dir, f);
         const st = fs.statSync(full);
@@ -786,6 +828,91 @@ async function prepareAudio(
       return outPath;
     }
     return null; // nessuna traccia audio estraibile
+  } finally {
+    try {
+      ffmpeg.exit('kill');
+    } catch {
+      /* ignora */
+    }
+  }
+}
+
+/**
+ * Per i contenitori che il webview non sa aprire (MKV/AVI/TS/FLV): rimuxa il
+ * video (copia, senza ricodificare) in un MP4 temporaneo riproducibile ed estrae
+ * l'audio in MP3, in un'unica esecuzione di ffmpeg-WASM. Il video è null se il
+ * rimux non riesce o il file è troppo grande; l'audio è null se non c'è traccia.
+ */
+async function prepareRemux(
+  srcPath: string,
+  tempDir: string,
+): Promise<{ videoPath: string | null; audioPath: string | null }> {
+  const stat = await fs.promises.stat(srcPath);
+  const key = createHash('sha1')
+    .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
+    .digest('hex')
+    .slice(0, 16);
+  const videoPath = path.join(tempDir, key + '.mp4');
+  const audioPath = path.join(tempDir, key + '.mp3');
+
+  const touch = (p: string): void => {
+    try {
+      const now = new Date();
+      fs.utimesSync(p, now, now);
+    } catch {
+      /* ignora */
+    }
+  };
+
+  // Cache: riusa video (e audio) già rimuxati.
+  if (fs.existsSync(videoPath) && fs.statSync(videoPath).size > 0) {
+    touch(videoPath);
+    const haveAudio =
+      fs.existsSync(audioPath) && fs.statSync(audioPath).size > 0;
+    if (haveAudio) {
+      touch(audioPath);
+    }
+    return { videoPath, audioPath: haveAudio ? audioPath : null };
+  }
+
+  if (stat.size > MAX_INPUT_BYTES) {
+    return { videoPath: null, audioPath: null };
+  }
+
+  const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
+  try {
+    const inName = 'input' + path.extname(srcPath).toLowerCase();
+    ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
+    // Un solo run: video copiato in MP4 (no re-encode, no audio) + audio in MP3.
+    await ffmpeg.run(
+      '-i', inName,
+      '-map', '0:v:0?', '-c:v', 'copy', '-an', 'video.mp4',
+      '-map', '0:a:0?', '-c:a', 'libmp3lame', '-q:a', '4',
+      '-ar', '48000', '-ac', '2', 'audio.mp3',
+    );
+    let v: Uint8Array | undefined;
+    let a: Uint8Array | undefined;
+    try {
+      v = ffmpeg.fs.readFile('video.mp4');
+    } catch {
+      v = undefined;
+    }
+    try {
+      a = ffmpeg.fs.readFile('audio.mp3');
+    } catch {
+      a = undefined;
+    }
+    let vp: string | null = null;
+    let ap: string | null = null;
+    if (v && v.length > 0) {
+      await fs.promises.writeFile(videoPath, Buffer.from(v));
+      vp = videoPath;
+    }
+    if (a && a.length > 0) {
+      await fs.promises.writeFile(audioPath, Buffer.from(a));
+      ap = audioPath;
+    }
+    return { videoPath: vp, audioPath: ap };
   } finally {
     try {
       ffmpeg.exit('kill');

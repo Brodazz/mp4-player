@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.1] - 2026-06-27
+
+### Added
+- **MKV, AVI and TS support** (H.264 video): these containers are remuxed to a
+  temporary MP4 on the fly (a fast repackage, no re-encoding) so the player can
+  show them, with audio extracted as usual. Files whose video isn't H.264 (e.g.
+  HEVC/VP9) show a clear "unsupported codec" message.
+
 ## [0.6.0] - 2026-06-27
 
 ### Changed

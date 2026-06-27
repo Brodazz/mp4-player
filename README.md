@@ -6,9 +6,10 @@
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extension that plays `.mp4`, `.mov` and `.m4v` videos (video **and** audio) in a
-Visual Studio Code editor tab. You can keep the video open in one pane and keep
-writing code in another by splitting the editor — no external windows.
+Extension that plays `.mp4`, `.mov`, `.m4v`, **`.mkv`**, `.avi` and `.ts` videos
+(video **and** audio) in a Visual Studio Code editor tab. You can keep the video
+open in one pane and keep writing code in another by splitting the editor — no
+external windows.
 
 <!-- Media URLs must be absolute HTTPS (the Marketplace doesn't render relative paths),
      so these point at the raw files on the main branch. -->
@@ -52,6 +53,10 @@ WebAssembly** — into MP3, then plays it **in sync** with the video. Everything
 happens offline, on your PC, from a **single universal package** (no per-platform
 binaries). The extension registers a *Custom Editor* for `.mp4`, `.mov` and `.m4v`.
 
+For containers VS Code can't open directly — **`.mkv`, `.avi`, `.ts`** — the
+extension **remuxes** the H.264 video into a temporary MP4 (a fast repackage, no
+re-encoding) so the Webview can play it, then extracts the audio the same way.
+
 ## Installation
 
 ### From a `.vsix` file
@@ -60,7 +65,7 @@ binaries). The extension registers a *Custom Editor* for `.mp4`, `.mov` and `.m4
 3. Or from the terminal: `code --install-extension mp4-player.vsix`
 
 ### Usage
-- Open a `.mp4`, `.mov` or `.m4v` file from the Explorer: the player starts.
+- Open a `.mp4`, `.mov`, `.m4v`, `.mkv`, `.avi` or `.ts` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 - A **custom control bar** appears at the bottom of the player on mouse move
   (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,
@@ -101,8 +106,10 @@ no network connections.
 
 ## Supported codecs
 
-- **Video**: **H.264** (the most common). Codecs such as **H.265/HEVC** may not
-  be supported by the VS Code engine: in that case the player shows an error.
+- **Video**: **H.264** (the most common), in any of the supported containers
+  (MP4/MOV/M4V played directly; MKV/AVI/TS remuxed to MP4 first). Other video
+  codecs such as **H.265/HEVC** or **VP9** aren't decoded by the VS Code engine:
+  in that case the player shows an error.
 - **Audio**: handled via local transcoding with a bundled WebAssembly `ffmpeg`,
   so it works even with **AAC** (which VS Code does not decode on its own) — and
   AC-3, ALAC and other codecs too. The audio is converted to a temporary MP3 the
