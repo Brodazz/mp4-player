@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1] - 2026-06-27
+
+### Changed
+- Documentation: the README now describes the **Copy / Save** frame capture and the
+  zero-config subtitles more clearly (no functional changes).
+
 ## [0.7.0] - 2026-06-27
 
 ### Added
