@@ -31,6 +31,8 @@ play **with audio out of the box** — no setup, **no local server**, fully
 - ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
 - 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
 - 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), volume, Picture-in-Picture, fullscreen
+- 📝 **Subtitles & frame grab** — auto-loads a sidecar `.srt`/`.vtt`, and `S` saves the current frame as a PNG
+- 💾 **Remembers** your volume, speed and resume position
 - 🪶 **Lightweight & focused** — does one thing, well
 - 🖥️ **Cross-platform** — one universal package for Windows, Linux and macOS (Intel & Apple Silicon)
 
@@ -71,6 +73,9 @@ so the Webview can play it, then extracts the audio the same way.
 - A **custom control bar** appears at the bottom of the player on mouse move
   (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,
   fullscreen) and fades out during playback. Keyboard shortcuts work too (see below).
+- **Subtitles**: drop a `.srt` (or `.vtt`) file with the **same name** next to the
+  video and it loads automatically — toggle with the `CC` button or `C`.
+- **Save a frame**: press `S` (or the camera button) to export the current frame as a PNG.
 
 ## Keyboard shortcuts
 
@@ -82,6 +87,8 @@ so the Webview can play it, then extracts the audio the same way.
 | `<` / `>` | Slower / Faster (0.25×–2×) |
 | `M` | Mute |
 | `P` | Picture-in-Picture |
+| `S` | Save current frame (PNG) |
+| `C` | Subtitles on/off |
 | `F` | Fullscreen |
 
 ## Development

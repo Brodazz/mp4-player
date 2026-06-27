@@ -39,6 +39,108 @@ async function writeAtomic(dest: string, data: Buffer): Promise<void> {
   await fs.promises.rename(tmp, dest);
 }
 
+interface Cue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** Cerca un sottotitolo "sidecar" (.srt o .vtt) con lo stesso nome del video e
+ *  lo converte in una lista di cue. I cue vengono iniettati via JS nel webview
+ *  (addTextTrack), evitando il <track> esterno e quindi blocchi CSP/MIME. */
+function findSubtitle(videoPath: string): Cue[] {
+  try {
+    const dir = path.dirname(videoPath);
+    const base = path.basename(videoPath, path.extname(videoPath));
+    for (const ext of ['.vtt', '.srt']) {
+      const p = path.join(dir, base + ext);
+      if (fs.existsSync(p)) {
+        return parseCues(fs.readFileSync(p, 'utf8'));
+      }
+    }
+  } catch {
+    /* sottotitoli best-effort */
+  }
+  return [];
+}
+
+/** Parser minimale di SRT/WebVTT → cue (secondi). Gestisce sia "," sia "." nei ms. */
+function parseCues(content: string): Cue[] {
+  const cues: Cue[] = [];
+  const toSec = (s: string): number => {
+    const m = /(\d\d):(\d\d):(\d\d)[.,](\d{1,3})/.exec(s);
+    return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000 : -1;
+  };
+  for (const block of content.replace(/\r/g, '').split(/\n\n+/)) {
+    const lines = block
+      .split('\n')
+      .filter((l) => l.trim() && l.trim().toUpperCase() !== 'WEBVTT');
+    const arrow = lines.find((l) => l.includes('-->'));
+    if (!arrow) {
+      continue;
+    }
+    const [a, b] = arrow.split('-->');
+    const start = toSec(a);
+    const end = toSec(b);
+    if (start < 0 || end < 0) {
+      continue;
+    }
+    const text = lines.slice(lines.indexOf(arrow) + 1).join('\n').trim();
+    if (text) {
+      cues.push({ start, end, text });
+    }
+  }
+  return cues;
+}
+
+/** Salva un fotogramma (PNG, dataURL dal webview) chiedendo dove con un dialog. */
+function saveFrame(dataUrl: string, videoPath: string, fileDir: vscode.Uri): void {
+  const m = /^data:image\/png;base64,(.+)$/.exec(dataUrl);
+  if (!m) {
+    return;
+  }
+  const buf = Buffer.from(m[1], 'base64');
+  const base = path.basename(videoPath, path.extname(videoPath));
+  const defaultUri = vscode.Uri.joinPath(fileDir, base + '-frame.png');
+  vscode.window
+    .showSaveDialog({ defaultUri, filters: { Images: ['png'] } })
+    .then((uri) => {
+      if (uri) {
+        vscode.workspace.fs.writeFile(uri, buf);
+      }
+    });
+}
+
+/** Dopo qualche apertura, invita (UNA volta sola, in modo discreto) a recensire. */
+function maybeAskForRating(context: vscode.ExtensionContext): void {
+  const state = context.globalState;
+  if (state.get<boolean>('rate.asked', false)) {
+    return;
+  }
+  const opens = state.get<number>('rate.opens', 0) + 1;
+  state.update('rate.opens', opens);
+  if (opens < 5) {
+    return;
+  }
+  state.update('rate.asked', true);
+  const rate = 'Rate it ⭐';
+  vscode.window
+    .showInformationMessage(
+      'Enjoying Modern Video Player? A quick rating really helps a solo developer 🙏',
+      rate,
+      'Not now',
+    )
+    .then((choice) => {
+      if (choice === rate) {
+        vscode.env.openExternal(
+          vscode.Uri.parse(
+            'https://marketplace.visualstudio.com/items?itemName=Brodazz.mp4-player&ssr=false#review-details',
+          ),
+        );
+      }
+    });
+}
+
 /** Punto di ingresso dell'estensione. */
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(Mp4EditorProvider.register(context));
@@ -80,6 +182,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
   ): void {
     const fileDir = vscode.Uri.joinPath(document.uri, '..');
     const tempDir = getTempDir();
+    maybeAskForRating(this.context);
 
     webviewPanel.webview.options = {
       enableScripts: true,
@@ -100,13 +203,23 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       pos: state.get<number>('pos:' + fsPath, 0),
     };
 
+    // Sottotitolo sidecar opzionale (stesso nome del video, .srt/.vtt) → cue.
+    const cues = findSubtitle(fsPath);
+
     let disposed = false;
     webviewPanel.onDidDispose(() => {
       disposed = true;
     });
 
     webviewPanel.webview.onDidReceiveMessage(
-      (msg: { type?: string; volume?: number; muted?: boolean; speed?: number; time?: number }) => {
+      (msg: {
+        type?: string;
+        volume?: number;
+        muted?: boolean;
+        speed?: number;
+        time?: number;
+        data?: string;
+      }) => {
         if (!msg) {
           return;
         }
@@ -119,6 +232,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           if (typeof msg.speed === 'number') { state.update('pref.speed', msg.speed); }
         } else if (msg.type === 'pos' && typeof msg.time === 'number') {
           state.update('pos:' + fsPath, msg.time);
+        } else if (msg.type === 'saveFrame' && typeof msg.data === 'string') {
+          saveFrame(msg.data, fsPath, fileDir);
         }
       },
     );
@@ -143,7 +258,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     if (nativeContainer) {
       // MP4/MOV/M4V: il webview riproduce il file direttamente; estraiamo l'audio.
       const videoUri = webviewPanel.webview.asWebviewUri(document.uri);
-      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, videoUri);
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, videoUri, cues);
       once('audio:' + fsPath, () => prepareAudio(fsPath, tempDir))
         .then(sendAudio)
         .catch((err: unknown) => {
@@ -156,7 +271,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     } else {
       // MKV/AVI: il webview non apre il contenitore. Rimuxiamo il video (H.264)
       // in un MP4 temporaneo e lo inviamo, più l'audio in MP3.
-      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs);
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, undefined, cues);
       once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir))
         .then((res) => {
           if (disposed) {
@@ -190,6 +305,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     webview: vscode.Webview,
     prefs: Prefs,
     videoUri?: vscode.Uri,
+    cues: Cue[] = [],
   ): string {
     const nonce = getNonce();
     const csp = [
@@ -255,6 +371,38 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       padding: 24px;
     }
     .error code { color: #ccc; }
+
+    /* Menù di cattura fotogramma (Copy / Save) */
+    .capmenu {
+      display: none;
+      position: absolute;
+      left: 50%;
+      bottom: 72px;
+      transform: translateX(-50%);
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(28, 28, 28, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      z-index: 9;
+      font-family: var(--vscode-font-family, sans-serif);
+    }
+    .capmenu.open { display: flex; }
+    .capmenu-label { color: #aaa; font-size: 12px; margin: 0 4px; }
+    .capmenu button {
+      background: var(--vscode-button-secondaryBackground, #3a3d41);
+      color: var(--vscode-button-secondaryForeground, #fff);
+      border: none;
+      border-radius: 5px;
+      padding: 6px 16px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .capmenu button:hover {
+      background: var(--vscode-button-secondaryHoverBackground, #45494e);
+    }
 
     /* Barra di controlli custom, a comparsa */
     .bar {
@@ -433,6 +581,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         (e.g. <code>H.265/HEVC</code>, VP9). Supported: <code>H.264</code>
         video in MP4/MOV/M4V/MKV/AVI.
       </div>
+      <div id="capMenu" class="capmenu">
+        <span class="capmenu-label">Frame</span>
+        <button id="capCopy" type="button">Copy</button>
+        <button id="capSave" type="button">Save</button>
+      </div>
       <div id="bar" class="bar">
         <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" />
         <div class="row">
@@ -447,6 +600,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
             <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)" aria-label="Playback speed">1×</button>
             <div id="speedMenu" class="speedmenu"></div>
           </div>
+          ${cues.length ? `<button id="ccBtn" class="ic" title="Subtitles (C)" aria-label="Subtitles"></button>` : ''}
+          <button id="camBtn" class="ic" title="Capture frame (S)" aria-label="Capture frame"></button>
           <button id="pipBtn" class="ic" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture"></button>
           <button id="fsBtn" class="ic" title="Fullscreen (F)" aria-label="Fullscreen"></button>
         </div>
@@ -475,6 +630,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const speedMenu = document.getElementById('speedMenu');
     const pipBtn = document.getElementById('pipBtn');
     const fsBtn = document.getElementById('fsBtn');
+    const camBtn = document.getElementById('camBtn');
+    const ccBtn = document.getElementById('ccBtn');
 
     let audioReady = false;
     let useExternal = false;
@@ -483,6 +640,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     let seeking = false;
     const vscodeApi = acquireVsCodeApi();
     const SAVED = ${JSON.stringify(prefs)};
+    const CUES = ${JSON.stringify(cues)};
 
     const IC = {
       play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
@@ -493,7 +651,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       volOff: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       fsIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
       fsOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
-      pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg>'
+      pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg>',
+      cc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3" stroke-linecap="round"/></svg>',
+      cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3"/></svg>'
     };
 
     playBtn.innerHTML = IC.play;
@@ -502,6 +662,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     muteBtn.innerHTML = IC.volOn;
     pipBtn.innerHTML = IC.pip;
     fsBtn.innerHTML = IC.fsIn;
+    camBtn.innerHTML = IC.cam;
+    if (ccBtn) { ccBtn.innerHTML = IC.cc; }
     // Picture-in-Picture: nascondi il pulsante se il webview non lo supporta.
     if (!document.pictureInPictureEnabled) { pipBtn.style.display = 'none'; }
 
@@ -752,6 +914,71 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     }
     pipBtn.addEventListener('click', togglePip);
 
+    // --- Cattura fotogramma (PNG): mostra menù Copy / Save ---
+    const capMenu = document.getElementById('capMenu');
+    const capCopy = document.getElementById('capCopy');
+    const capSave = document.getElementById('capSave');
+    let capturedData = null;
+    function captureFrame() {
+      if (!player.videoWidth) { return; }
+      const c = document.createElement('canvas');
+      c.width = player.videoWidth;
+      c.height = player.videoHeight;
+      c.getContext('2d').drawImage(player, 0, 0, c.width, c.height);
+      try { capturedData = c.toDataURL('image/png'); } catch (e) { capturedData = null; return; }
+      capMenu.classList.add('open');
+      showBar();
+    }
+    camBtn.addEventListener('click', captureFrame);
+    capSave.addEventListener('click', () => {
+      if (capturedData) { vscodeApi.postMessage({ type: 'saveFrame', data: capturedData }); }
+      capMenu.classList.remove('open');
+    });
+    function dataUrlToBlob(dataUrl) {
+      const comma = dataUrl.indexOf(',');
+      const mime = (dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png');
+      const bin = atob(dataUrl.slice(comma + 1));
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) { arr[i] = bin.charCodeAt(i); }
+      return new Blob([arr], { type: mime });
+    }
+    capCopy.addEventListener('click', async () => {
+      if (!capturedData) { return; }
+      try {
+        const blob = dataUrlToBlob(capturedData);
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        showStatus('Frame copied', false);
+        setTimeout(hideStatus, 1200);
+      } catch (e) {
+        showStatus('Copy not available', false);
+        setTimeout(hideStatus, 1800);
+      }
+      capMenu.classList.remove('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!capMenu.classList.contains('open')) { return; }
+      if (capMenu.contains(e.target) || camBtn.contains(e.target) || e.target === camBtn) { return; }
+      capMenu.classList.remove('open');
+    });
+
+    // --- Sottotitoli: cue iniettati via JS (niente <track> esterno → niente CSP) ---
+    let ccTrack = null;
+    let ccOn = true;
+    if (CUES && CUES.length) {
+      ccTrack = player.addTextTrack('subtitles', 'Subtitles', 'und');
+      CUES.forEach((c) => {
+        try { ccTrack.addCue(new VTTCue(c.start, c.end, c.text)); } catch (e) {}
+      });
+      ccTrack.mode = 'showing';
+    }
+    function toggleCC() {
+      if (!ccTrack) { return; }
+      ccOn = !ccOn;
+      ccTrack.mode = ccOn ? 'showing' : 'hidden';
+      if (ccBtn) { ccBtn.style.opacity = ccOn ? '1' : '0.5'; }
+    }
+    if (ccBtn) { ccBtn.addEventListener('click', toggleCC); }
+
     // --- Auto-hide della barra ---
     let hideTimer = null;
     function showBar() {
@@ -805,6 +1032,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           break;
         case 'f': toggleFs(); break;
         case 'p': togglePip(); break;
+        case 's': captureFrame(); break;
+        case 'c': toggleCC(); break;
         case 'm': player.muted = !player.muted; break;
         case '>':
           e.preventDefault();
@@ -851,7 +1080,11 @@ function cleanupCache(): void {
     let files = fs
       .readdirSync(dir)
       .filter(
-        (f) => f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.mp4'),
+        (f) =>
+          f.endsWith('.mp3') ||
+          f.endsWith('.wav') ||
+          f.endsWith('.mp4') ||
+          f.endsWith('.vtt'),
       )
       .map((f) => {
         const full = path.join(dir, f);

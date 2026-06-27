@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-06-27
+
+### Added
+- **Subtitles**: a sidecar `.srt`/`.vtt` file with the same name as the video is
+  loaded automatically (SRT is converted to WebVTT on the fly). Toggle with the
+  `CC` button or `C`.
+- **Capture frame**: the camera button (or `S`) grabs the current frame and offers
+  **Copy** (to the clipboard, ready to paste into a chat/doc) or **Save** as a PNG.
+- A gentle, one-time prompt asking for a ⭐ rating after a few videos.
+
 ## [0.6.2] - 2026-06-27
 
 ### Fixed
