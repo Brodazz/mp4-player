@@ -1,19 +1,14 @@
 import * as vscode from 'vscode';
 import { randomBytes, createHash } from 'crypto';
-import * as cp from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
+import { FFmpeg } from '@ffmpeg.wasm/main';
 
-// Percorso del binario ffmpeg incluso (ffmpeg-static). Il motore di VS Code non
-// decodifica l'audio AAC degli MP4/MOV/M4V, quindi estraiamo/transcodifichiamo la
-// traccia audio in MP3 (che la Webview riproduce) e la sincronizziamo col video.
-let ffmpegPath: string | undefined;
-try {
-  ffmpegPath = require('ffmpeg-static') as string;
-} catch {
-  ffmpegPath = undefined;
-}
+// Il motore di VS Code non decodifica l'audio AAC degli MP4/MOV/M4V: estraiamo la
+// traccia audio e la transcodifichiamo in MP3 (che la Webview riproduce) con un
+// ffmpeg compilato in WebAssembly (@ffmpeg.wasm), eseguito nell'extension host.
+// Un solo pacchetto universale, nessun binario nativo per piattaforma.
 
 /** Punto di ingresso dell'estensione. */
 export function activate(context: vscode.ExtensionContext): void {
@@ -677,23 +672,6 @@ function getTempDir(): string {
   return dir;
 }
 
-let ffmpegReady = false;
-
-/** Su macOS/Linux assicura che il binario ffmpeg abbia il permesso d'esecuzione. */
-function ensureFfmpegExecutable(): void {
-  if (ffmpegReady || !ffmpegPath) {
-    return;
-  }
-  ffmpegReady = true;
-  if (process.platform !== 'win32') {
-    try {
-      fs.chmodSync(ffmpegPath, 0o755);
-    } catch {
-      /* ignora: potrebbe essere già eseguibile */
-    }
-  }
-}
-
 /**
  * Pulizia automatica della cache audio: elimina i file più vecchi di 7 giorni
  * e, se la cartella supera 1 GB, rimuove i meno usati finché non rientra.
@@ -746,28 +724,27 @@ function cleanupCache(): void {
   }
 }
 
+// Oltre questa soglia ffmpeg-WASM caricherebbe in memoria un file troppo grande:
+// si salta l'estrazione audio (il video va comunque). Lo streaming a chunk
+// arriverà con la build WASM su misura.
+const MAX_INPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
+
 /**
- * Estrae e transcodifica la traccia audio in MP3 — formato leggero che il motore
- * di VS Code riproduce in modo affidabile. Se l'encoder MP3 non fosse disponibile
- * su una piattaforma, ripiega automaticamente su WAV (sempre presente).
- * Ritorna il percorso del file audio, oppure null se il video non ha audio.
+ * Estrae la traccia audio e la transcodifica in MP3 con ffmpeg-WASM, eseguito
+ * nell'extension host. Ritorna il percorso del file audio, oppure null se il
+ * video non ha audio (o la traccia non è estraibile).
  */
 async function prepareAudio(
   srcPath: string,
   tempDir: string,
 ): Promise<string | null> {
-  if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
-    throw new Error('ffmpeg component not available on this platform');
-  }
-  ensureFfmpegExecutable();
-
   const stat = await fs.promises.stat(srcPath);
   const key = createHash('sha1')
     .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
     .digest('hex')
     .slice(0, 16);
 
-  // Cache: riusa un audio già transcodificato (MP3 preferito, WAV di fallback).
+  // Cache: riusa un audio già transcodificato.
   for (const ext of ['.mp3', '.wav']) {
     const cached = path.join(tempDir, key + ext);
     if (fs.existsSync(cached) && fs.statSync(cached).size > 0) {
@@ -781,55 +758,41 @@ async function prepareAudio(
     }
   }
 
-  // Verifica la presenza di una traccia audio.
-  const probe = await runFfmpeg(['-hide_banner', '-i', srcPath]);
-  const hasAudio = /Stream #\d+:\d+.*: Audio:/i.test(probe.stderr);
-  if (!hasAudio) {
-    return null; // nessuna traccia audio: niente da riprodurre
-  }
-
-  // Esegue una transcodifica; ritorna il percorso se riesce, altrimenti null.
-  const tryEncode = async (
-    ext: string,
-    codecArgs: string[],
-  ): Promise<string | null> => {
-    const out = path.join(tempDir, key + ext);
-    const res = await runFfmpeg([
-      '-y', '-hide_banner', '-i', srcPath,
-      '-vn', ...codecArgs, '-ar', '48000', '-ac', '2', out,
-    ]);
-    if (res.code === 0 && fs.existsSync(out) && fs.statSync(out).size > 0) {
-      return out;
-    }
-    try { fs.unlinkSync(out); } catch { /* ignora */ }
+  if (stat.size > MAX_INPUT_BYTES) {
     return null;
-  };
-
-  // 1) MP3 leggero; 2) fallback WAV (PCM) se l'encoder MP3 manca/fallisce.
-  const mp3 = await tryEncode('.mp3', ['-c:a', 'libmp3lame', '-q:a', '4', '-f', 'mp3']);
-  if (mp3) {
-    return mp3;
-  }
-  const wav = await tryEncode('.wav', ['-c:a', 'pcm_s16le', '-f', 'wav']);
-  if (wav) {
-    return wav;
   }
 
-  throw new Error('audio transcoding failed');
-}
-
-function runFfmpeg(
-  args: string[],
-): Promise<{ code: number; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = cp.spawn(ffmpegPath as string, args, { windowsHide: true });
-    let stderr = '';
-    proc.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
-    });
-    proc.on('error', reject);
-    proc.on('close', (code) => resolve({ code: code ?? -1, stderr }));
-  });
+  // Istanza ffmpeg-WASM monouso: il core esce dopo un run, quindi ne creiamo una
+  // per chiamata (il caricamento del modulo è ~50 ms).
+  const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
+  try {
+    const inName = 'input' + path.extname(srcPath).toLowerCase();
+    ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
+    await ffmpeg.run(
+      '-i', inName, '-vn',
+      '-c:a', 'libmp3lame', '-q:a', '4',
+      '-ar', '48000', '-ac', '2',
+      'output.mp3',
+    );
+    let out: Uint8Array | undefined;
+    try {
+      out = ffmpeg.fs.readFile('output.mp3');
+    } catch {
+      out = undefined;
+    }
+    if (out && out.length > 0) {
+      const outPath = path.join(tempDir, key + '.mp3');
+      await fs.promises.writeFile(outPath, Buffer.from(out));
+      return outPath;
+    }
+    return null; // nessuna traccia audio estraibile
+  } finally {
+    try {
+      ffmpeg.exit('kill');
+    } catch {
+      /* ignora */
+    }
+  }
 }
 
 function getNonce(): string {

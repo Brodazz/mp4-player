@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.0] - 2026-06-27
+
+### Changed
+- **Audio engine rewritten on WebAssembly ffmpeg.** Audio is now extracted and
+  transcoded in-process with a bundled WebAssembly `ffmpeg` instead of a native
+  binary. Result: **one universal package** (~9 MB download / ~25 MB installed,
+  down from ~80 MB), no per-platform builds, and no external processes spawned.
+
+### Added
+- **Broader audio coverage**: besides AAC, the player now also handles AC-3,
+  E-AC-3, ALAC and other audio codecs found in MP4/MOV/M4V files.
+
+### Note
+- Very large files (> 1 GB) skip audio extraction for now (the video still
+  plays); chunked streaming will come in a follow-up.
+
 ## [0.5.6] - 2026-06-25
 
 ### Changed

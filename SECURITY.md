@@ -17,3 +17,5 @@ The extension shows videos in a VS Code Webview with restrictive measures:
   **video's folder only**.
 - The editor is **read-only**: the extension does not modify files.
 - No network connections: the video is streamed from the local disk.
+- Audio is extracted **in-process** via a WebAssembly `ffmpeg` — no native
+  binaries are bundled and no external processes are spawned.

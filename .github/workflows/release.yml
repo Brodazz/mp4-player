@@ -9,24 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: win32-x64
-            npm_platform: win32
-            npm_arch: x64
-          - target: linux-x64
-            npm_platform: linux
-            npm_arch: x64
-          - target: darwin-x64
-            npm_platform: darwin
-            npm_arch: x64
-          - target: darwin-arm64
-            npm_platform: darwin
-            npm_arch: arm64
     env:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
@@ -38,57 +22,32 @@ jobs:
           node-version: 20
           cache: npm
 
-      # ffmpeg-static sceglie quale binario scaricare in base a npm_config_*,
-      # non all'architettura dell'host: così possiamo impacchettare tutti i
-      # target da un singolo runner ubuntu-latest (niente runner macOS Intel
-      # in coda per ore).
       - name: Install dependencies
         run: npm ci
-        env:
-          npm_config_platform: ${{ matrix.npm_platform }}
-          npm_config_arch: ${{ matrix.npm_arch }}
 
+      # ffmpeg gira in WebAssembly (nessun binario nativo), quindi il pacchetto è
+      # universale: un solo job, niente matrice per-piattaforma.
       - name: Package VSIX
-        run: npx @vscode/vsce package --target ${{ matrix.target }} -o mp4-player-${{ matrix.target }}.vsix
+        run: npx @vscode/vsce package -o mp4-player.vsix
 
-      # Pubblica sul Marketplace. Se quel target+versione esiste già (es. re-run
-      # del workflow), lo trattiamo come successo invece di fallire il job.
+      # Se questa versione è già pubblicata (es. re-run), lo trattiamo come successo.
       - name: Publish to Marketplace
         if: ${{ env.VSCE_PAT != '' }}
         run: |
           set +e
-          OUT=$(npx @vscode/vsce publish --packagePath mp4-player-${{ matrix.target }}.vsix -p "$VSCE_PAT" 2>&1)
+          OUT=$(npx @vscode/vsce publish --packagePath mp4-player.vsix -p "$VSCE_PAT" 2>&1)
           CODE=$?
           echo "$OUT"
           if [ $CODE -ne 0 ]; then
             if echo "$OUT" | grep -qi "already exists"; then
-              echo "::notice::Questa versione per ${{ matrix.target }} è già pubblicata — ignoro."
+              echo "::notice::Questa versione è già pubblicata — ignoro."
               exit 0
             fi
             exit $CODE
           fi
 
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vsix-${{ matrix.target }}
-          path: mp4-player-${{ matrix.target }}.vsix
-          retention-days: 1
-
-  # Un solo job finale crea la GitHub Release e allega tutti i .vsix: così si
-  # evita la race dei job in parallelo che scrivono la stessa release insieme.
-  github-release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all VSIX
-        uses: actions/download-artifact@v4
-        with:
-          path: vsix
-          merge-multiple: true
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: vsix/*.vsix
+          files: mp4-player.vsix
           generate_release_notes: true
