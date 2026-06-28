@@ -1317,8 +1317,10 @@ async function prepareAudio(
     ffmpeg.fs.writeFile(inName, srcData);
     const code = await ffmpeg.run(
       '-i', inName, '-vn',
-      '-c:a', 'libmp3lame', '-q:a', '4',
-      '-ar', '48000', '-ac', '2',
+      // Niente ricampionamento forzato (-ar): l'MP3 esce al sample rate della
+      // sorgente — il webview lo riproduce comunque e si evita un resample che
+      // costa ~1/3 del tempo audio. Manteniamo -ac 2 per il downmix surround→stereo.
+      '-c:a', 'libmp3lame', '-q:a', '4', '-ac', '2',
       'output.mp3',
     );
     let out: Uint8Array | undefined;
@@ -1433,7 +1435,8 @@ async function prepareRemux(
   );
   const a = await ffmpegRun(
     inName, srcData,
-    ['-i', inName, '-vn', '-c:a', 'libmp3lame', '-q:a', '4', '-ar', '48000', '-ac', '2', 'audio.mp3'],
+    // Niente -ar (vedi prepareAudio): MP3 al rate sorgente, ~1/3 più veloce.
+    ['-i', inName, '-vn', '-c:a', 'libmp3lame', '-q:a', '4', '-ac', '2', 'audio.mp3'],
     'audio.mp3',
   );
 

@@ -2,7 +2,7 @@
   "name": "mp4-player",
   "displayName": "Modern Video Player — with Audio (MP4, MKV, MOV)",
   "description": "Play MP4, MKV, MOV, M4V and AVI videos with sound — right in a VS Code tab. Real audio (even AAC) with zero setup: ffmpeg is bundled (WebAssembly), no install, no local server, fully offline. Lightweight, secure, one universal package.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",

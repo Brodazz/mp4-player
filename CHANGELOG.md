@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.1] - 2026-06-28
+
+### Changed
+- **Faster audio extraction** (so MKV/AVI/HEVC and MP4/MOV files load quicker):
+  dropped a forced 48 kHz resample that cost about a third of the audio step for
+  no benefit — the MP3 now keeps the source sample rate, which the player handles
+  fine. The saving grows with clip length, so medium/long files open noticeably
+  sooner. (Surround tracks are still downmixed to stereo.)
+
 ## [0.8.0] - 2026-06-28
 
 ### Added
