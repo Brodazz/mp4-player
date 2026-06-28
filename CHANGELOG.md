@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.3] - 2026-06-29
+
+### Added
+- **WebM playback** (`.webm`): the **VP9** and **VP8** video inside WebM — which
+  the VS Code engine can't decode — is **converted to H.264 on the fly** by the
+  bundled WebAssembly ffmpeg, exactly like HEVC. **Opus** and **Vorbis** audio are
+  extracted and played in sync. Still zero-setup and one universal package — no
+  extra download. (VP9/VP8 inside `.mkv` now plays too.) AV1 isn't decodable here
+  and still shows the honest per-codec message; very large/long files are skipped.
+
 ## [0.8.2] - 2026-06-28
 
 ### Changed

@@ -717,7 +717,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'noAudio') {
         hideStatus();
       } else if (msg.type === 'converting') {
-        showStatus('Converting HEVC… this can take a moment', true);
+        showStatus('Converting video… this can take a moment', true);
       } else if (msg.type === 'codecInfo') {
         // Codec video riconosciuto host-side: serve a dare un errore onesto se
         // la decodifica fallisce (il player ci prova comunque: se la piattaforma
@@ -731,7 +731,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         if (msg.reason === 'tooLarge') {
           error.innerHTML = 'This file is too large to play here (over 1&nbsp;GB).<br />Very large files are not processed in memory yet.';
         } else if (msg.reason === 'convertTooBig') {
-          error.innerHTML = 'This <b>HEVC</b> video is too large to convert in the editor (long or high-bitrate).<br />Shorter HEVC clips play here, converted to H.264 on the fly.';
+          error.innerHTML = 'This video is too large to convert in the editor (long or high-bitrate).<br />Shorter <b>HEVC/VP9</b> clips play here, converted to H.264 on the fly.';
         }
         showVideoError();
       }
@@ -1315,14 +1315,15 @@ async function prepareRemux(
 
   // Decidiamo cosa fare del VIDEO in base al codec sorgente:
   //  • H.264 (o sconosciuto) → copia (no re-encode): rapidissimo.
-  //  • HEVC → transcodifica in H.264, ma solo entro i limiti di gating.
-  //  • VP9/AV1/altro → non li decodifichiamo: errore onesto.
-  const isHevc = codec ? /HEVC/.test(codec.name) : false;
-  if (codec && !codec.h264 && !isHevc) {
+  //  • HEVC / VP9 / VP8 → li decodifichiamo nel core WASM → transcodifica in
+  //    H.264 (entro il gating). VP9/VP8 sono il video dei WebM.
+  //  • AV1 / MPEG-2 / altro → decoder assente: errore onesto.
+  const transcodable = codec ? /HEVC|VP9|VP8/.test(codec.name) : false;
+  if (codec && !codec.h264 && !transcodable) {
     return { videoPath: null, audioPath: null, codec };
   }
   let transcode = false;
-  if (isHevc) {
+  if (transcodable) {
     if (stat.size > MAX_TRANSCODE_BYTES) {
       return { videoPath: null, audioPath: null, codec, convertTooBig: true };
     }

@@ -6,9 +6,9 @@
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extension that plays `.mp4`, `.mov`, `.m4v`, **`.mkv`**, `.avi` (plus `.m2ts`,
-`.mts`, `.flv`, `.f4v`) videos (video **and** audio) in a Visual Studio Code
-editor tab. You can keep the video open in one pane and keep writing code in
+Extension that plays `.mp4`, `.mov`, `.m4v`, **`.mkv`**, `.avi`, **`.webm`** (plus
+`.m2ts`, `.mts`, `.flv`, `.f4v`) videos (video **and** audio) in a Visual Studio
+Code editor tab. You can keep the video open in one pane and keep writing code in
 another by splitting the editor — no external windows.
 
 <!-- Media URLs must be absolute HTTPS (the Marketplace doesn't render relative paths),
@@ -33,8 +33,8 @@ box** — while staying a **single, lightweight, secure, fully offline** extensi
 with a strict CSP and no local server. You get the format coverage of the heavy
 players without giving up the things that made the simple ones safe.
 
-- 🔊 **Real audio** on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV & F4V — even AAC, which VS Code can't decode on its own
-- 🎬 **HEVC / H.265 too** (8- or 10-bit) — converted to H.264 on the fly, since VS Code can't decode it natively
+- 🔊 **Real audio** on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV, F4V & WebM — even AAC (and Opus/Vorbis), which VS Code can't decode on its own
+- 🎬 **HEVC / H.265 and WebM (VP9/VP8) too** — converted to H.264 on the fly, since VS Code can't decode them natively
 - ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
 - 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
 - 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), volume, Picture-in-Picture, fullscreen
@@ -47,8 +47,8 @@ players without giving up the things that made the simple ones safe.
 | | **This extension** | Classic player extensions | Heavyweight HEVC players |
 |---|:--:|:--:|:--:|
 | Audio incl. AAC / AC-3 | ✅ out of the box | ❌ silent (or needs ffmpeg) | ✅ |
-| MKV · AVI · TS · FLV | ✅ | ⚠️ rarely | ✅ |
-| **HEVC / H.265** (8- & 10-bit) | ✅ converted on the fly | ❌ | ✅ real-time |
+| MKV · AVI · TS · FLV · WebM | ✅ | ⚠️ rarely | ✅ |
+| **HEVC / H.265 · VP9 / VP8** | ✅ converted on the fly | ❌ | ✅ real-time |
 | Zero setup (no ffmpeg to install) | ✅ bundled | ⚠️ often install it yourself | ✅ |
 | Lightweight | ✅ ~9 MB, one universal package | ✅ | ⚠️ heavier per-webview decoder |
 | Security | 🔒 strict CSP, read-only, offline | varies | ⚠️ relaxed CSP |
@@ -68,12 +68,13 @@ track and transcodes it locally — with a **bundled `ffmpeg` compiled to
 WebAssembly** — into MP3, then plays it **in sync** with the video. Everything
 happens offline, on your PC, from a **single universal package** (no per-platform
 binaries). The extension registers a *Custom Editor* for `.mp4`, `.mov`, `.m4v`,
-`.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv` and `.f4v`.
+`.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv`, `.f4v` and `.webm`.
 
 For containers VS Code can't open directly — **`.mkv`**, `.avi`, `.m2ts`, `.mts`,
-`.flv`, `.f4v` — the extension **remuxes** the H.264 video into a temporary MP4 (a
-fast repackage, no re-encoding) so the Webview can play it, then extracts the audio
-the same way.
+`.flv`, `.f4v`, `.webm` — the extension **remuxes** the H.264 video into a temporary
+MP4 (a fast repackage, no re-encoding) so the Webview can play it, then extracts the
+audio the same way. When the video is **HEVC or VP9/VP8** (which the Webview can't
+decode), it is converted to H.264 on the fly instead of just repackaged.
 
 ## Installation
 
@@ -83,7 +84,7 @@ the same way.
 3. Or from the terminal: `code --install-extension mp4-player.vsix`
 
 ### Usage
-- Open a `.mp4`, `.mov`, `.m4v`, `.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv` or `.f4v` file from the Explorer: the player starts.
+- Open a `.mp4`, `.mov`, `.m4v`, `.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv`, `.f4v` or `.webm` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 - A **custom control bar** appears at the bottom of the player on mouse move
   (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,
@@ -136,13 +137,12 @@ no network connections.
 ## Supported codecs
 
 - **Video**: **H.264** (the most common) plays in any supported container
-  (MP4/MOV/M4V directly; MKV/AVI/M2TS/MTS/FLV/F4V remuxed to MP4 first).
-  **H.265/HEVC** (8- or 10-bit) in those remuxed containers is **converted to
-  H.264 on the fly** — VS Code can't decode HEVC itself, so the bundled ffmpeg
-  does it (a one-time wait, shown as "Converting HEVC…"); very large/long HEVC
-  files are skipped to keep that wait short. Codecs that can't be decoded at all
-  (e.g. **VP9/AV1**) show a clear error **naming the codec found**, so you know
-  exactly why.
+  (MP4/MOV/M4V directly; MKV/AVI/M2TS/MTS/FLV/F4V/WebM remuxed to MP4 first).
+  **H.265/HEVC** (8- or 10-bit) and **WebM's VP9/VP8** are **converted to H.264
+  on the fly** — VS Code can't decode them itself, so the bundled ffmpeg does it
+  (a one-time wait, shown as "Converting video…"); very large/long files are
+  skipped to keep that wait short. Codecs that can't be decoded at all (e.g.
+  **AV1**) show a clear error **naming the codec found**, so you know exactly why.
 - **Audio**: handled via local transcoding with a bundled WebAssembly `ffmpeg`,
   so it works even with **AAC** (which VS Code does not decode on its own) — and
   AC-3, ALAC and other codecs too. The audio is converted to a temporary MP3 the
