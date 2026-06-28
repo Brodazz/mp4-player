@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { FFmpeg } from '@ffmpeg.wasm/main';
+import { Cue, parseCues, decodeSubtitle, videoCodec } from './media';
 
 // Il motore di VS Code non decodifica l'audio AAC degli MP4/MOV/M4V: estraiamo la
 // traccia audio e la transcodifichiamo in MP3 (che la Webview riproduce) con un
@@ -39,12 +40,6 @@ async function writeAtomic(dest: string, data: Buffer): Promise<void> {
   await fs.promises.rename(tmp, dest);
 }
 
-interface Cue {
-  start: number;
-  end: number;
-  text: string;
-}
-
 /** Cerca un sottotitolo "sidecar" (.srt o .vtt) con lo stesso nome del video e
  *  lo converte in una lista di cue. I cue vengono iniettati via JS nel webview
  *  (addTextTrack), evitando il <track> esterno e quindi blocchi CSP/MIME. */
@@ -55,95 +50,13 @@ function findSubtitle(videoPath: string): Cue[] {
     for (const ext of ['.vtt', '.srt']) {
       const p = path.join(dir, base + ext);
       if (fs.existsSync(p)) {
-        return parseCues(fs.readFileSync(p, 'utf8'));
+        return parseCues(decodeSubtitle(fs.readFileSync(p)));
       }
     }
   } catch {
     /* sottotitoli best-effort */
   }
   return [];
-}
-
-/** Parser minimale di SRT/WebVTT → cue (secondi). Gestisce sia "," sia "." nei ms. */
-function parseCues(content: string): Cue[] {
-  const cues: Cue[] = [];
-  const toSec = (s: string): number => {
-    const m = /(\d\d):(\d\d):(\d\d)[.,](\d{1,3})/.exec(s);
-    return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000 : -1;
-  };
-  for (const block of content.replace(/\r/g, '').split(/\n\n+/)) {
-    const lines = block
-      .split('\n')
-      .filter((l) => l.trim() && l.trim().toUpperCase() !== 'WEBVTT');
-    const arrow = lines.find((l) => l.includes('-->'));
-    if (!arrow) {
-      continue;
-    }
-    const [a, b] = arrow.split('-->');
-    const start = toSec(a);
-    const end = toSec(b);
-    if (start < 0 || end < 0) {
-      continue;
-    }
-    const text = lines.slice(lines.indexOf(arrow) + 1).join('\n').trim();
-    if (text) {
-      cues.push({ start, end, text });
-    }
-  }
-  return cues;
-}
-
-/**
- * Riconosce il codec VIDEO leggendo il fourcc del sample-entry (box `stsd`) in un
- * file ISOBMFF (MP4/MOV/M4V/F4V, e l'MP4 prodotto dal remux). Serve solo a dare un
- * messaggio d'errore onesto ("HEVC", "VP9", …) quando il motore non sa decodificare:
- * best-effort, niente parsing pesante.
- */
-function videoCodec(buf: Buffer): { name: string; h264: boolean } | null {
-  const MAP: Record<string, string> = {
-    avc1: 'H.264', avc3: 'H.264',
-    hvc1: 'HEVC (H.265)', hev1: 'HEVC (H.265)',
-    vp08: 'VP8', vp09: 'VP9', av01: 'AV1',
-    mp4v: 'MPEG-4 Part 2', ap4h: 'ProRes', apcn: 'ProRes',
-  };
-  const AUDIO = new Set([
-    'mp4a', 'ac-3', 'ec-3', 'alac', 'Opus', 'fLaC', 'sowt', 'twos', 'samr', '.mp3',
-  ]);
-  const found: string[] = [];
-  let i = 0;
-  while (i < buf.length && found.length < 8) {
-    const p = buf.indexOf('stsd', i, 'latin1');
-    if (p < 0) { break; }
-    // fourcc = stsd(4) + versione/flag(4) + numero voci(4) + dimensione voce(4)
-    if (p + 20 <= buf.length) {
-      found.push(buf.toString('latin1', p + 16, p + 20));
-    }
-    i = p + 4;
-  }
-  for (const cc of found) {
-    if (MAP[cc]) { return { name: MAP[cc], h264: cc === 'avc1' || cc === 'avc3' }; }
-  }
-  for (const cc of found) {
-    if (!AUDIO.has(cc)) {
-      const clean = cc.replace(/[^\x20-\x7e]/g, '').trim();
-      return { name: clean || 'unknown', h264: false };
-    }
-  }
-  // Fallback Matroska/WebM: il codec è una stringa CodecID nell'header EBML.
-  const head = buf.toString('latin1', 0, Math.min(buf.length, 1 << 18));
-  const MKV: [string, string, boolean][] = [
-    ['V_MPEG4/ISO/AVC', 'H.264', true],
-    ['V_MPEGH/ISO/HEVC', 'HEVC (H.265)', false],
-    ['V_VP9', 'VP9', false],
-    ['V_VP8', 'VP8', false],
-    ['V_AV1', 'AV1', false],
-    ['V_MPEG4/ISO/ASP', 'MPEG-4 Part 2', false],
-    ['V_MPEG2', 'MPEG-2', false],
-  ];
-  for (const [sig, name, h264] of MKV) {
-    if (head.includes(sig)) { return { name, h264 }; }
-  }
-  return null;
 }
 
 /** Salva un fotogramma (PNG, dataURL dal webview) chiedendo dove con un dialog. */
@@ -333,12 +246,13 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           sendCodec(res.codec);
           sendAudio(res.audioPath);
         })
-        .catch((err: unknown) => {
-          if (disposed) {
-            return;
+        .catch(() => {
+          // Estrazione audio fallita o assente (es. video muto): il core può
+          // andare in crash con libmp3lame senza traccia. Non è un errore per
+          // l'utente — il video va comunque, semplicemente senza audio.
+          if (!disposed) {
+            webviewPanel.webview.postMessage({ type: 'noAudio' });
           }
-          const message = err instanceof Error ? err.message : String(err);
-          webviewPanel.webview.postMessage({ type: 'audioError', message });
         });
     } else {
       // MKV/AVI: il webview non apre il contenitore. Rimuxiamo il video (H.264)
@@ -802,9 +716,6 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         if (!player.paused) { syncTime(); audio.play().catch(() => {}); }
       } else if (msg.type === 'noAudio') {
         hideStatus();
-      } else if (msg.type === 'audioError') {
-        showStatus('Audio unavailable: ' + msg.message, false);
-        setTimeout(hideStatus, 7000);
       } else if (msg.type === 'converting') {
         showStatus('Converting HEVC… this can take a moment', true);
       } else if (msg.type === 'codecInfo') {
@@ -1114,6 +1025,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     document.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'INPUT') { return; }
       switch (e.key) {
+        case 'Escape':
+          // Chiude i menù a comparsa (velocità / cattura) se aperti.
+          speedMenu.classList.remove('open');
+          if (capMenu) { capMenu.classList.remove('open'); }
+          break;
         case ' ':
         case 'k':
           e.preventDefault();
@@ -1182,9 +1098,8 @@ function cleanupCache(): void {
       .filter(
         (f) =>
           f.endsWith('.mp3') ||
-          f.endsWith('.wav') ||
           f.endsWith('.mp4') ||
-          f.endsWith('.vtt'),
+          f.endsWith('.part'), // .part = scritture atomiche interrotte (orfani)
       )
       .map((f) => {
         const full = path.join(dir, f);
@@ -1289,17 +1204,15 @@ async function prepareAudio(
 
   // Cache: riusa un audio già transcodificato (l'audio era già stato estratto,
   // quindi il file aveva aperto bene: il codec non serve più, fallback al generico).
-  for (const ext of ['.mp3', '.wav']) {
-    const cached = path.join(tempDir, key + ext);
-    if (fs.existsSync(cached) && fs.statSync(cached).size > 0) {
-      try {
-        const now = new Date();
-        fs.utimesSync(cached, now, now);
-      } catch {
-        /* ignora */
-      }
-      return { audioPath: cached, codec: null };
+  const cached = path.join(tempDir, key + '.mp3');
+  if (fs.existsSync(cached) && fs.statSync(cached).size > 0) {
+    try {
+      const now = new Date();
+      fs.utimesSync(cached, now, now);
+    } catch {
+      /* ignora */
     }
+    return { audioPath: cached, codec: null };
   }
 
   if (stat.size > MAX_INPUT_BYTES) {

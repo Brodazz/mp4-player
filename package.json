@@ -1,8 +1,8 @@
 {
   "name": "mp4-player",
-  "displayName": "Modern Video Player — with Audio (MP4, MKV, MOV)",
-  "description": "Play MP4, MKV, MOV, M4V and AVI videos with sound — right in a VS Code tab. Real audio (even AAC) with zero setup: ffmpeg is bundled (WebAssembly), no install, no local server, fully offline. Lightweight, secure, one universal package.",
-  "version": "0.8.1",
+  "displayName": "Modern Video Player — with Audio (MP4, MKV, HEVC)",
+  "description": "Play MP4, MKV, MOV, M4V, AVI, M2TS, FLV and HEVC/H.265 videos with sound — right in a VS Code tab. Real audio (even AAC) with zero setup: ffmpeg is bundled (WebAssembly), no install, no local server, fully offline. HEVC is converted to H.264 on the fly. Lightweight, secure, one universal package.",
+  "version": "0.8.2",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
@@ -108,6 +108,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "tsc -p ./ && node --test out/media.test.js",
     "package": "vsce package"
   },
   "dependencies": {

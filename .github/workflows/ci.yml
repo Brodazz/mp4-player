@@ -24,6 +24,9 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Test
+        run: npm test
+
       - name: Package VSIX
         run: npx @vscode/vsce package --allow-missing-repository
 

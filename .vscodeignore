@@ -9,3 +9,4 @@ tsconfig.json
 .gitignore
 **/*.map
 **/*.ts
+out/**/*.test.js

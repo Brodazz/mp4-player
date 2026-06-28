@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.2] - 2026-06-28
+
+### Changed
+- **Marketplace listing** now reflects the real coverage: HEVC/H.265 and the newer
+  containers (M2TS, MTS, FLV, F4V) are advertised in the name and description.
+
+### Fixed
+- A video with **no audio track** no longer shows a scary internal error
+  ("Audio unavailable: …") — it just plays without sound, as expected.
+- **Subtitles** in non-UTF-8 encodings (UTF-16 / UTF-8 with BOM, common in
+  downloaded `.srt`) now load correctly instead of silently failing; malformed
+  timestamps are ignored more strictly.
+- Hardened the codec-name shown in the error overlay (sanitised), and the temp
+  cache cleanup now also removes orphaned partial files.
+
+### Internal
+- Extracted the pure subtitle/codec helpers into a separate module and added a
+  unit-test suite (run on CI), to catch regressions in that fiddly parsing.
+
 ## [0.8.1] - 2026-06-28
 
 ### Changed
