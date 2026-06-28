@@ -344,15 +344,19 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       // MKV/AVI: il webview non apre il contenitore. Rimuxiamo il video (H.264)
       // in un MP4 temporaneo e lo inviamo, più l'audio in MP3.
       webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, undefined, cues);
-      once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir))
+      const onTranscode = (): void => {
+        if (!disposed) {
+          webviewPanel.webview.postMessage({ type: 'converting' });
+        }
+      };
+      once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir, onTranscode))
         .then((res) => {
           if (disposed) {
             return;
           }
-          // Codec noto dalla sorgente: lo mandiamo SEMPRE (anche se il remux
-          // fallisce), così l'overlay d'errore può nominarlo onestamente.
-          sendCodec(res.codec ?? null);
           if (res.videoPath) {
+            // Riproducibile (copia H.264 o transcodifica HEVC→H.264 riuscita):
+            // niente codecInfo, il file servito È H.264.
             const vUri = webviewPanel.webview.asWebviewUri(
               vscode.Uri.file(res.videoPath),
             );
@@ -361,9 +365,15 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
               src: vUri.toString(),
             });
           } else {
+            // Errore: mandiamo il codec sorgente per nominarlo onestamente.
+            sendCodec(res.codec ?? null);
             webviewPanel.webview.postMessage({
               type: 'videoError',
-              reason: res.tooLarge ? 'tooLarge' : 'failed',
+              reason: res.tooLarge
+                ? 'tooLarge'
+                : res.convertTooBig
+                  ? 'convertTooBig'
+                  : 'failed',
             });
           }
           sendAudio(res.audioPath);
@@ -795,6 +805,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'audioError') {
         showStatus('Audio unavailable: ' + msg.message, false);
         setTimeout(hideStatus, 7000);
+      } else if (msg.type === 'converting') {
+        showStatus('Converting HEVC… this can take a moment', true);
       } else if (msg.type === 'codecInfo') {
         // Codec video riconosciuto host-side: serve a dare un errore onesto se
         // la decodifica fallisce (il player ci prova comunque: se la piattaforma
@@ -807,6 +819,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'videoError') {
         if (msg.reason === 'tooLarge') {
           error.innerHTML = 'This file is too large to play here (over 1&nbsp;GB).<br />Very large files are not processed in memory yet.';
+        } else if (msg.reason === 'convertTooBig') {
+          error.innerHTML = 'This <b>HEVC</b> video is too large to convert in the editor (long or high-bitrate).<br />Shorter HEVC clips play here, converted to H.264 on the fly.';
         }
         showVideoError();
       }
@@ -1215,6 +1229,49 @@ function cleanupCache(): void {
 // arriverà con la build WASM su misura.
 const MAX_INPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
+// Tier B1 — transcodifica HEVC → H.264 (il webview non decodifica HEVC, ma il
+// core WASM sì). Costa TEMPO (re-encode di ogni frame): ~realtime a 720p, ~2× a
+// 1080p, inaccettabile a 4K/lunghi. Gate per DIMENSIONE sorgente (proxy della
+// durata×risoluzione): sopra soglia → errore onesto, così l'attesa resta nei
+// minuti. La dimensione è anche il gate più robusto: niente probe = una sola
+// istanza WASM per apertura (un probe separato può far crashare la transcodifica
+// successiva per pressione di memoria del core monothread).
+const MAX_TRANSCODE_BYTES = 128 * 1024 * 1024; // ~128 MB
+
+/**
+ * Esegue un comando ffmpeg-WASM in un'istanza usa-e-getta e ne legge un output.
+ * Tollerante: se il core fallisce o crasha (es. libmp3lame senza traccia audio
+ * → "memory access out of bounds"), restituisce undefined invece di propagare.
+ */
+async function ffmpegRun(
+  inName: string,
+  inData: Uint8Array,
+  args: string[],
+  outName: string,
+): Promise<Uint8Array | undefined> {
+  const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
+  try {
+    ffmpeg.fs.writeFile(inName, inData);
+    const code = await ffmpeg.run(...args);
+    if (code !== 0) {
+      return undefined;
+    }
+    try {
+      return ffmpeg.fs.readFile(outName);
+    } catch {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  } finally {
+    try {
+      ffmpeg.exit('kill');
+    } catch {
+      /* ignora */
+    }
+  }
+}
+
 /**
  * Estrae la traccia audio e la transcodifica in MP3 con ffmpeg-WASM, eseguito
  * nell'extension host. Ritorna il percorso del file audio, oppure null se il
@@ -1294,10 +1351,12 @@ async function prepareAudio(
 async function prepareRemux(
   srcPath: string,
   tempDir: string,
+  onTranscode?: () => void,
 ): Promise<{
   videoPath: string | null;
   audioPath: string | null;
   tooLarge?: boolean;
+  convertTooBig?: boolean;
   codec?: { name: string; h264: boolean } | null;
 }> {
   const stat = await fs.promises.stat(srcPath);
@@ -1337,59 +1396,58 @@ async function prepareRemux(
   // core WASM (succede copiando HEVC da MKV in MP4).
   const srcData = await fs.promises.readFile(srcPath);
   const codec = videoCodec(srcData);
+  const ext = path.extname(srcPath).toLowerCase();
 
-  // Se sappiamo già che il video non è H.264 (es. HEVC/VP9 in MKV), inutile (e
-  // rischioso: il core può crashare) tentare la copia → errore onesto e basta.
-  if (codec && !codec.h264) {
+  // Decidiamo cosa fare del VIDEO in base al codec sorgente:
+  //  • H.264 (o sconosciuto) → copia (no re-encode): rapidissimo.
+  //  • HEVC → transcodifica in H.264, ma solo entro i limiti di gating.
+  //  • VP9/AV1/altro → non li decodifichiamo: errore onesto.
+  const isHevc = codec ? /HEVC/.test(codec.name) : false;
+  if (codec && !codec.h264 && !isHevc) {
     return { videoPath: null, audioPath: null, codec };
   }
-
-  const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
-  try {
-    const inName = 'input' + path.extname(srcPath).toLowerCase();
-    ffmpeg.fs.writeFile(inName, srcData);
-    // Un solo run: video copiato in MP4 (no re-encode, no audio) + audio in MP3.
-    const code = await ffmpeg.run(
-      '-i', inName,
-      '-map', '0:v:0?', '-c:v', 'copy', '-an', 'video.mp4',
-      '-map', '0:a:0?', '-c:a', 'libmp3lame', '-q:a', '4',
-      '-ar', '48000', '-ac', '2', 'audio.mp3',
-    );
-    let v: Uint8Array | undefined;
-    let a: Uint8Array | undefined;
-    try {
-      v = ffmpeg.fs.readFile('video.mp4');
-    } catch {
-      v = undefined;
+  let transcode = false;
+  if (isHevc) {
+    if (stat.size > MAX_TRANSCODE_BYTES) {
+      return { videoPath: null, audioPath: null, codec, convertTooBig: true };
     }
-    try {
-      a = ffmpeg.fs.readFile('audio.mp3');
-    } catch {
-      a = undefined;
-    }
-    // Se ffmpeg è fallito (code != 0) non ci fidiamo di output parziali.
-    let vp: string | null = null;
-    let ap: string | null = null;
-    if (code === 0 && v && v.length > 0) {
-      await writeAtomic(videoPath, Buffer.from(v));
-      vp = videoPath;
-    }
-    if (code === 0 && a && a.length > 0) {
-      await writeAtomic(audioPath, Buffer.from(a));
-      ap = audioPath;
-    }
-    return { videoPath: vp, audioPath: ap, codec };
-  } catch {
-    // Il core può andare in "memory access out of bounds" copiando certi codec:
-    // niente video, ma il codec lo conosciamo già dalla sorgente.
-    return { videoPath: null, audioPath: null, codec };
-  } finally {
-    try {
-      ffmpeg.exit('kill');
-    } catch {
-      /* ignora */
-    }
+    transcode = true;
   }
+
+  if (transcode) {
+    onTranscode?.(); // avvisa il webview: l'attesa sarà più lunga del solito
+  }
+
+  const inName = 'input' + ext;
+  const vArgs = transcode
+    ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p']
+    : ['-c:v', 'copy'];
+
+  // Due run SEPARATI (istanze usa-e-getta), non uno combinato: l'estrazione audio
+  // con libmp3lame fa crashare il core se non c'è traccia audio. Tenendoli distinti,
+  // il VIDEO esce sempre (copia o transcodifica) e l'AUDIO è best-effort.
+  const v = await ffmpegRun(
+    inName, srcData,
+    ['-i', inName, '-map', '0:v:0?', ...vArgs, '-an', 'video.mp4'],
+    'video.mp4',
+  );
+  const a = await ffmpegRun(
+    inName, srcData,
+    ['-i', inName, '-vn', '-c:a', 'libmp3lame', '-q:a', '4', '-ar', '48000', '-ac', '2', 'audio.mp3'],
+    'audio.mp3',
+  );
+
+  let vp: string | null = null;
+  let ap: string | null = null;
+  if (v && v.length > 0) {
+    await writeAtomic(videoPath, Buffer.from(v));
+    vp = videoPath;
+  }
+  if (a && a.length > 0) {
+    await writeAtomic(audioPath, Buffer.from(a));
+    ap = audioPath;
+  }
+  return { videoPath: vp, audioPath: ap, codec };
 }
 
 function getNonce(): string {

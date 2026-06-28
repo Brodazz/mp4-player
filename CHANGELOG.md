@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.0] - 2026-06-28
+
+### Added
+- **HEVC / H.265 playback** in the supported containers (MKV/AVI/M2TS/MTS/FLV/F4V):
+  the VS Code engine can't decode HEVC, so the bundled WebAssembly `ffmpeg`
+  **converts it to H.264 on the fly** (a "Converting HEVC…" badge shows during the
+  one-time conversion). Works for 8-bit and 10-bit HEVC, with audio. Still
+  zero-setup and one universal package — no extra download. Very large/long HEVC
+  files (over ~128 MB) are skipped with a clear message, to keep conversion times
+  reasonable; other codecs (VP9/AV1) continue to show the honest per-codec error.
+
+### Fixed
+- A video with **no audio track** in a remuxed container (MKV/AVI/TS/FLV) could
+  fail to play at all; video and audio are now processed independently, so the
+  video always plays and audio is added when present.
+
 ## [0.7.2] - 2026-06-28
 
 ### Added

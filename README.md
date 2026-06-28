@@ -27,7 +27,8 @@ just works: it **bundles `ffmpeg`** (compiled to WebAssembly), so MP4 **and MKV*
 play **with audio out of the box** — no setup, **no local server**, fully
 **offline**, in a single lightweight and secure extension.
 
-- 🔊 **Real audio** on MP4, MKV, MOV, M4V & AVI — even AAC, which VS Code can't decode on its own
+- 🔊 **Real audio** on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV & F4V — even AAC, which VS Code can't decode on its own
+- 🎬 **HEVC / H.265 too** (8- or 10-bit) — converted to H.264 on the fly, since VS Code can't decode it natively
 - ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
 - 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
 - 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), volume, Picture-in-Picture, fullscreen
@@ -122,10 +123,14 @@ no network connections.
 
 ## Supported codecs
 
-- **Video**: **H.264** (the most common), in any of the supported containers
-  (MP4/MOV/M4V played directly; MKV/AVI remuxed to MP4 first). Other video
-  codecs such as **H.265/HEVC** or **VP9** aren't decoded by the VS Code engine:
-  in that case the player shows an error.
+- **Video**: **H.264** (the most common) plays in any supported container
+  (MP4/MOV/M4V directly; MKV/AVI/M2TS/MTS/FLV/F4V remuxed to MP4 first).
+  **H.265/HEVC** (8- or 10-bit) in those remuxed containers is **converted to
+  H.264 on the fly** — VS Code can't decode HEVC itself, so the bundled ffmpeg
+  does it (a one-time wait, shown as "Converting HEVC…"); very large/long HEVC
+  files are skipped to keep that wait short. Codecs that can't be decoded at all
+  (e.g. **VP9/AV1**) show a clear error **naming the codec found**, so you know
+  exactly why.
 - **Audio**: handled via local transcoding with a bundled WebAssembly `ffmpeg`,
   so it works even with **AAC** (which VS Code does not decode on its own) — and
   AC-3, ALAC and other codecs too. The audio is converted to a temporary MP3 the
