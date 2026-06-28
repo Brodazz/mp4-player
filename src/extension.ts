@@ -93,6 +93,59 @@ function parseCues(content: string): Cue[] {
   return cues;
 }
 
+/**
+ * Riconosce il codec VIDEO leggendo il fourcc del sample-entry (box `stsd`) in un
+ * file ISOBMFF (MP4/MOV/M4V/F4V, e l'MP4 prodotto dal remux). Serve solo a dare un
+ * messaggio d'errore onesto ("HEVC", "VP9", …) quando il motore non sa decodificare:
+ * best-effort, niente parsing pesante.
+ */
+function videoCodec(buf: Buffer): { name: string; h264: boolean } | null {
+  const MAP: Record<string, string> = {
+    avc1: 'H.264', avc3: 'H.264',
+    hvc1: 'HEVC (H.265)', hev1: 'HEVC (H.265)',
+    vp08: 'VP8', vp09: 'VP9', av01: 'AV1',
+    mp4v: 'MPEG-4 Part 2', ap4h: 'ProRes', apcn: 'ProRes',
+  };
+  const AUDIO = new Set([
+    'mp4a', 'ac-3', 'ec-3', 'alac', 'Opus', 'fLaC', 'sowt', 'twos', 'samr', '.mp3',
+  ]);
+  const found: string[] = [];
+  let i = 0;
+  while (i < buf.length && found.length < 8) {
+    const p = buf.indexOf('stsd', i, 'latin1');
+    if (p < 0) { break; }
+    // fourcc = stsd(4) + versione/flag(4) + numero voci(4) + dimensione voce(4)
+    if (p + 20 <= buf.length) {
+      found.push(buf.toString('latin1', p + 16, p + 20));
+    }
+    i = p + 4;
+  }
+  for (const cc of found) {
+    if (MAP[cc]) { return { name: MAP[cc], h264: cc === 'avc1' || cc === 'avc3' }; }
+  }
+  for (const cc of found) {
+    if (!AUDIO.has(cc)) {
+      const clean = cc.replace(/[^\x20-\x7e]/g, '').trim();
+      return { name: clean || 'unknown', h264: false };
+    }
+  }
+  // Fallback Matroska/WebM: il codec è una stringa CodecID nell'header EBML.
+  const head = buf.toString('latin1', 0, Math.min(buf.length, 1 << 18));
+  const MKV: [string, string, boolean][] = [
+    ['V_MPEG4/ISO/AVC', 'H.264', true],
+    ['V_MPEGH/ISO/HEVC', 'HEVC (H.265)', false],
+    ['V_VP9', 'VP9', false],
+    ['V_VP8', 'VP8', false],
+    ['V_AV1', 'AV1', false],
+    ['V_MPEG4/ISO/ASP', 'MPEG-4 Part 2', false],
+    ['V_MPEG2', 'MPEG-2', false],
+  ];
+  for (const [sig, name, h264] of MKV) {
+    if (head.includes(sig)) { return { name, h264 }; }
+  }
+  return null;
+}
+
 /** Salva un fotogramma (PNG, dataURL dal webview) chiedendo dove con un dialog. */
 function saveFrame(dataUrl: string, videoPath: string, fileDir: vscode.Uri): void {
   const m = /^data:image\/png;base64,(.+)$/.exec(dataUrl);
@@ -238,6 +291,19 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       },
     );
 
+    const sendCodec = (
+      codec: { name: string; h264: boolean } | null,
+    ): void => {
+      if (disposed || !codec) {
+        return;
+      }
+      webviewPanel.webview.postMessage({
+        type: 'codecInfo',
+        name: codec.name,
+        h264: codec.h264,
+      });
+    };
+
     const sendAudio = (audioPath: string | null): void => {
       if (disposed) {
         return;
@@ -260,7 +326,13 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       const videoUri = webviewPanel.webview.asWebviewUri(document.uri);
       webviewPanel.webview.html = this.getHtml(webviewPanel.webview, prefs, videoUri, cues);
       once('audio:' + fsPath, () => prepareAudio(fsPath, tempDir))
-        .then(sendAudio)
+        .then((res) => {
+          if (disposed) {
+            return;
+          }
+          sendCodec(res.codec);
+          sendAudio(res.audioPath);
+        })
         .catch((err: unknown) => {
           if (disposed) {
             return;
@@ -277,6 +349,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           if (disposed) {
             return;
           }
+          // Codec noto dalla sorgente: lo mandiamo SEMPRE (anche se il remux
+          // fallisce), così l'overlay d'errore può nominarlo onestamente.
+          sendCodec(res.codec ?? null);
           if (res.videoPath) {
             const vUri = webviewPanel.webview.asWebviewUri(
               vscode.Uri.file(res.videoPath),
@@ -681,7 +756,13 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     player.addEventListener('error', showVideoError);
     const source = player.querySelector('source');
     if (source) { source.addEventListener('error', showVideoError); }
+    let lastCodec = null;
     function showVideoError() {
+      if (lastCodec && !lastCodec.h264) {
+        error.innerHTML = 'This video uses the <b>' + lastCodec.name +
+          '</b> codec, which the VS&nbsp;Code engine cannot decode.<br />' +
+          'Files with <b>H.264</b> video play here, with sound.';
+      }
       player.style.display = 'none';
       bar.style.display = 'none';
       error.style.display = 'block';
@@ -714,6 +795,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'audioError') {
         showStatus('Audio unavailable: ' + msg.message, false);
         setTimeout(hideStatus, 7000);
+      } else if (msg.type === 'codecInfo') {
+        // Codec video riconosciuto host-side: serve a dare un errore onesto se
+        // la decodifica fallisce (il player ci prova comunque: se la piattaforma
+        // supporta es. HEVC, riproduce lo stesso).
+        lastCodec = { name: msg.name, h264: msg.h264 };
       } else if (msg.type === 'videoReady') {
         // Contenitore rimuxato (MKV/AVI/…): la sorgente arriva qui, asincrona.
         player.src = msg.src;
@@ -1137,14 +1223,15 @@ const MAX_INPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
 async function prepareAudio(
   srcPath: string,
   tempDir: string,
-): Promise<string | null> {
+): Promise<{ audioPath: string | null; codec: { name: string; h264: boolean } | null }> {
   const stat = await fs.promises.stat(srcPath);
   const key = createHash('sha1')
     .update(srcPath + '|' + stat.size + '|' + stat.mtimeMs)
     .digest('hex')
     .slice(0, 16);
 
-  // Cache: riusa un audio già transcodificato.
+  // Cache: riusa un audio già transcodificato (l'audio era già stato estratto,
+  // quindi il file aveva aperto bene: il codec non serve più, fallback al generico).
   for (const ext of ['.mp3', '.wav']) {
     const cached = path.join(tempDir, key + ext);
     if (fs.existsSync(cached) && fs.statSync(cached).size > 0) {
@@ -1154,20 +1241,23 @@ async function prepareAudio(
       } catch {
         /* ignora */
       }
-      return cached;
+      return { audioPath: cached, codec: null };
     }
   }
 
   if (stat.size > MAX_INPUT_BYTES) {
-    return null;
+    return { audioPath: null, codec: null };
   }
+
+  const srcData = await fs.promises.readFile(srcPath);
+  const codec = videoCodec(srcData); // file nativo = ISOBMFF → leggibile
 
   // Istanza ffmpeg-WASM monouso: il core esce dopo un run, quindi ne creiamo una
   // per chiamata (il caricamento del modulo è ~50 ms).
   const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
   try {
     const inName = 'input' + path.extname(srcPath).toLowerCase();
-    ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
+    ffmpeg.fs.writeFile(inName, srcData);
     const code = await ffmpeg.run(
       '-i', inName, '-vn',
       '-c:a', 'libmp3lame', '-q:a', '4',
@@ -1183,9 +1273,9 @@ async function prepareAudio(
     if (code === 0 && out && out.length > 0) {
       const outPath = path.join(tempDir, key + '.mp3');
       await writeAtomic(outPath, Buffer.from(out));
-      return outPath;
+      return { audioPath: outPath, codec };
     }
-    return null; // nessuna traccia audio estraibile
+    return { audioPath: null, codec }; // nessuna traccia audio estraibile
   } finally {
     try {
       ffmpeg.exit('kill');
@@ -1208,6 +1298,7 @@ async function prepareRemux(
   videoPath: string | null;
   audioPath: string | null;
   tooLarge?: boolean;
+  codec?: { name: string; h264: boolean } | null;
 }> {
   const stat = await fs.promises.stat(srcPath);
   const key = createHash('sha1')
@@ -1241,10 +1332,22 @@ async function prepareRemux(
     return { videoPath: null, audioPath: null, tooLarge: true };
   }
 
+  // Riconosciamo il codec dalla SORGENTE prima del remux: così possiamo dare un
+  // errore onesto ("HEVC", "VP9", …) anche se la copia fallisce o fa crashare il
+  // core WASM (succede copiando HEVC da MKV in MP4).
+  const srcData = await fs.promises.readFile(srcPath);
+  const codec = videoCodec(srcData);
+
+  // Se sappiamo già che il video non è H.264 (es. HEVC/VP9 in MKV), inutile (e
+  // rischioso: il core può crashare) tentare la copia → errore onesto e basta.
+  if (codec && !codec.h264) {
+    return { videoPath: null, audioPath: null, codec };
+  }
+
   const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
   try {
     const inName = 'input' + path.extname(srcPath).toLowerCase();
-    ffmpeg.fs.writeFile(inName, await fs.promises.readFile(srcPath));
+    ffmpeg.fs.writeFile(inName, srcData);
     // Un solo run: video copiato in MP4 (no re-encode, no audio) + audio in MP3.
     const code = await ffmpeg.run(
       '-i', inName,
@@ -1275,7 +1378,11 @@ async function prepareRemux(
       await writeAtomic(audioPath, Buffer.from(a));
       ap = audioPath;
     }
-    return { videoPath: vp, audioPath: ap };
+    return { videoPath: vp, audioPath: ap, codec };
+  } catch {
+    // Il core può andare in "memory access out of bounds" copiando certi codec:
+    // niente video, ma il codec lo conosciamo già dalla sorgente.
+    return { videoPath: null, audioPath: null, codec };
   } finally {
     try {
       ffmpeg.exit('kill');

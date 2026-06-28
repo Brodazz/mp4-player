@@ -6,10 +6,10 @@
 [![CI](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml/badge.svg)](https://github.com/Brodazz/mp4-player/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extension that plays `.mp4`, `.mov`, `.m4v`, **`.mkv`** and `.avi` videos (video
-**and** audio) in a Visual Studio Code editor tab. You can keep the video open in
-one pane and keep writing code in another by splitting the editor — no external
-windows.
+Extension that plays `.mp4`, `.mov`, `.m4v`, **`.mkv`**, `.avi` (plus `.m2ts`,
+`.mts`, `.flv`, `.f4v`) videos (video **and** audio) in a Visual Studio Code
+editor tab. You can keep the video open in one pane and keep writing code in
+another by splitting the editor — no external windows.
 
 <!-- Media URLs must be absolute HTTPS (the Marketplace doesn't render relative paths),
      so these point at the raw files on the main branch. -->
@@ -55,11 +55,12 @@ track and transcodes it locally — with a **bundled `ffmpeg` compiled to
 WebAssembly** — into MP3, then plays it **in sync** with the video. Everything
 happens offline, on your PC, from a **single universal package** (no per-platform
 binaries). The extension registers a *Custom Editor* for `.mp4`, `.mov`, `.m4v`,
-`.mkv` and `.avi`.
+`.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv` and `.f4v`.
 
-For containers VS Code can't open directly — **`.mkv`** and `.avi` — the extension
-**remuxes** the H.264 video into a temporary MP4 (a fast repackage, no re-encoding)
-so the Webview can play it, then extracts the audio the same way.
+For containers VS Code can't open directly — **`.mkv`**, `.avi`, `.m2ts`, `.mts`,
+`.flv`, `.f4v` — the extension **remuxes** the H.264 video into a temporary MP4 (a
+fast repackage, no re-encoding) so the Webview can play it, then extracts the audio
+the same way.
 
 ## Installation
 
@@ -69,7 +70,7 @@ so the Webview can play it, then extracts the audio the same way.
 3. Or from the terminal: `code --install-extension mp4-player.vsix`
 
 ### Usage
-- Open a `.mp4`, `.mov`, `.m4v`, `.mkv` or `.avi` file from the Explorer: the player starts.
+- Open a `.mp4`, `.mov`, `.m4v`, `.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv` or `.f4v` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 - A **custom control bar** appears at the bottom of the player on mouse move
   (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,

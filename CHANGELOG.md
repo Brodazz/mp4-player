@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.2] - 2026-06-28
+
+### Added
+- **More containers** (H.264 inside): `.m2ts`, `.mts` (AVCHD camcorders), `.flv`
+  and `.f4v` now open, reusing the same on-the-fly remux to MP4 + audio extraction
+  as MKV/AVI — no re-encoding, no added size.
+
+### Changed
+- **Honest per-codec error**: when a video can't be decoded, the message now names
+  the actual codec it found (e.g. "This video uses the **HEVC (H.265)** codec…")
+  instead of a generic note. The codec is detected up front from the file, so
+  unplayable files fail fast with a clear reason instead of a silent black frame.
+
 ## [0.7.1] - 2026-06-27
 
 ### Changed
