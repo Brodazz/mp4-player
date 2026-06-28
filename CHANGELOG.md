@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.4] - 2026-06-29
+
+### Added
+- **Real progress bar during conversion**: while an HEVC/VP9/VP8 video is being
+  converted to H.264, the "Converting video…" badge now shows a live percentage
+  and a filling bar (parsed from the encoder's actual frame count), so you can see
+  how far along it is — most useful on longer files.
+
 ## [0.8.3] - 2026-06-29
 
 ### Added

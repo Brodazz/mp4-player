@@ -263,7 +263,12 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           webviewPanel.webview.postMessage({ type: 'converting' });
         }
       };
-      once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir, onTranscode))
+      const onProgress = (fraction: number): void => {
+        if (!disposed) {
+          webviewPanel.webview.postMessage({ type: 'progress', value: fraction });
+        }
+      };
+      once('remux:' + fsPath, () => prepareRemux(fsPath, tempDir, onTranscode, onProgress))
         .then((res) => {
           if (disposed) {
             return;
@@ -542,8 +547,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       top: 10px;
       right: 12px;
       display: none;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       background: rgba(0, 0, 0, 0.7);
       color: #ddd;
       font-family: var(--vscode-font-family, sans-serif);
@@ -551,6 +556,21 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       padding: 6px 10px;
       border-radius: 6px;
       z-index: 10;
+    }
+    .status-row { display: flex; align-items: center; gap: 8px; }
+    .progress {
+      display: none;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress.show { display: block; }
+    #progressFill {
+      height: 100%;
+      width: 0%;
+      background: var(--vscode-progressBar-background, #0a84ff);
+      transition: width 0.2s linear;
     }
     .spinner {
       width: 12px;
@@ -608,7 +628,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     </div>
   </div>
   <audio id="audio" preload="auto"></audio>
-  <div id="status" aria-live="polite"><span class="spinner"></span><span id="statusText">Preparing…</span></div>
+  <div id="status" aria-live="polite">
+    <div class="status-row"><span class="spinner"></span><span id="statusText">Preparing…</span></div>
+    <div id="progress" class="progress"><div id="progressFill"></div></div>
+  </div>
 
   <script nonce="${nonce}">
     const player = document.getElementById('player');
@@ -616,6 +639,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const audio = document.getElementById('audio');
     const status = document.getElementById('status');
     const statusText = document.getElementById('statusText');
+    const progress = document.getElementById('progress');
+    const progressFill = document.getElementById('progressFill');
     const wrap = document.getElementById('wrap');
     const bar = document.getElementById('bar');
     const seek = document.getElementById('seek');
@@ -698,7 +723,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       status.querySelector('.spinner').style.display = spinning ? 'block' : 'none';
       status.style.display = 'flex';
     }
-    function hideStatus() { status.style.display = 'none'; }
+    function hideStatus() { status.style.display = 'none'; progress.classList.remove('show'); }
 
     // Messaggi dall'estensione (audio pronto / assente / errore).
     window.addEventListener('message', (e) => {
@@ -717,7 +742,14 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       } else if (msg.type === 'noAudio') {
         hideStatus();
       } else if (msg.type === 'converting') {
-        showStatus('Converting video… this can take a moment', true);
+        showStatus('Converting video…', true);
+        progressFill.style.width = '0%';
+        progress.classList.add('show');
+      } else if (msg.type === 'progress') {
+        const pct = Math.max(0, Math.min(100, Math.round((msg.value || 0) * 100)));
+        statusText.textContent = 'Converting video… ' + pct + '%';
+        progressFill.style.width = pct + '%';
+        progress.classList.add('show');
       } else if (msg.type === 'codecInfo') {
         // Codec video riconosciuto host-side: serve a dare un errore onesto se
         // la decodifica fallisce (il player ci prova comunque: se la piattaforma
@@ -1163,8 +1195,38 @@ async function ffmpegRun(
   inData: Uint8Array,
   args: string[],
   outName: string,
+  onProgress?: (fraction: number) => void,
 ): Promise<Uint8Array | undefined> {
-  const ffmpeg = await FFmpeg.create({ core: '@ffmpeg.wasm/core-st' });
+  // Con onProgress: log attivo + parsing live di "frame= N" (e Duration/fps per il
+  // totale) → percentuale reale della transcodifica. Il logger viene chiamato dal
+  // vivo durante la run, così possiamo riportare l'avanzamento.
+  let opts: Record<string, unknown> = { core: '@ffmpeg.wasm/core-st' };
+  if (onProgress) {
+    let durSec = 0;
+    let fps = 0;
+    let total = 0;
+    let lastPct = -1;
+    opts = {
+      core: '@ffmpeg.wasm/core-st',
+      log: true,
+      logger: (_lvl: string, m: string): void => {
+        if (typeof m !== 'string') { return; }
+        if (!total) {
+          const d = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(m);
+          if (d) { durSec = +d[1] * 3600 + +d[2] * 60 + +d[3]; }
+          const f = /(\d+(?:\.\d+)?)\s*fps\b/.exec(m);
+          if (f) { fps = parseFloat(f[1]); }
+          if (durSec > 0 && fps > 0) { total = Math.round(durSec * fps); }
+        }
+        const fr = /frame=\s*(\d+)/.exec(m);
+        if (fr && total > 0) {
+          const pct = Math.min(99, Math.floor((+fr[1] / total) * 100));
+          if (pct > lastPct) { lastPct = pct; onProgress(pct / 100); }
+        }
+      },
+    };
+  }
+  const ffmpeg = await FFmpeg.create(opts as never);
   try {
     ffmpeg.fs.writeFile(inName, inData);
     const code = await ffmpeg.run(...args);
@@ -1267,6 +1329,7 @@ async function prepareRemux(
   srcPath: string,
   tempDir: string,
   onTranscode?: () => void,
+  onProgress?: (fraction: number) => void,
 ): Promise<{
   videoPath: string | null;
   audioPath: string | null;
@@ -1346,6 +1409,7 @@ async function prepareRemux(
     inName, srcData,
     ['-i', inName, '-map', '0:v:0?', ...vArgs, '-an', 'video.mp4'],
     'video.mp4',
+    transcode ? onProgress : undefined, // progresso solo quando si transcodifica
   );
   const a = await ffmpegRun(
     inName, srcData,
