@@ -21,11 +21,17 @@ another by splitting the editor — no external windows.
 
 ## Why this one
 
-Most video extensions for VS Code either **play MP4 without sound** (Chromium in
-VS Code can't decode AAC audio) or **make you install `ffmpeg` yourself**. This one
-just works: it **bundles `ffmpeg`** (compiled to WebAssembly), so MP4 **and MKV**
-play **with audio out of the box** — no setup, **no local server**, fully
-**offline**, in a single lightweight and secure extension.
+Video extensions for VS Code tend to fall into two camps. **Classic players** show
+MP4 but stay **silent** (Chromium in VS Code can't decode AAC), can't open MKV, and
+choke on HEVC — or they **make you install `ffmpeg` yourself**. **Heavyweight
+players** do add HEVC/AV1, but ship a large per-webview decoder and **loosen the
+security policy** to get there.
+
+This one is built to give you the best of both: it **bundles `ffmpeg`** (compiled
+to WebAssembly), so MP4, **MKV and even HEVC/H.265** play **with audio out of the
+box** — while staying a **single, lightweight, secure, fully offline** extension
+with a strict CSP and no local server. You get the format coverage of the heavy
+players without giving up the things that made the simple ones safe.
 
 - 🔊 **Real audio** on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV & F4V — even AAC, which VS Code can't decode on its own
 - 🎬 **HEVC / H.265 too** (8- or 10-bit) — converted to H.264 on the fly, since VS Code can't decode it natively
@@ -38,14 +44,20 @@ play **with audio out of the box** — no setup, **no local server**, fully
 - 🪶 **Lightweight & focused** — does one thing, well
 - 🖥️ **Cross-platform** — one universal package for Windows, Linux and macOS (Intel & Apple Silicon)
 
-| | This extension | Other VS Code video extensions |
-|---|:--:|:--:|
-| Audio on MP4 **& MKV** (incl. AAC) | ✅ out of the box | ❌ silent — or ⚠️ only if you install ffmpeg |
-| Setup required | ✅ none (ffmpeg bundled) | ⚠️ often needs ffmpeg installed |
-| Network / local server | ✅ none — fully offline | ⚠️ some run a local HTTP server |
-| Install | ✅ one universal package | ⚠️ per-platform builds or host ffmpeg |
-| Security | 🔒 strict CSP, read-only, no network | varies |
-| Control bar (speed · PiP · fullscreen) | ✅ built-in | varies |
+| | **This extension** | Classic player extensions | Heavyweight HEVC players |
+|---|:--:|:--:|:--:|
+| Audio incl. AAC / AC-3 | ✅ out of the box | ❌ silent (or needs ffmpeg) | ✅ |
+| MKV · AVI · TS · FLV | ✅ | ⚠️ rarely | ✅ |
+| **HEVC / H.265** (8- & 10-bit) | ✅ converted on the fly | ❌ | ✅ real-time |
+| Zero setup (no ffmpeg to install) | ✅ bundled | ⚠️ often install it yourself | ✅ |
+| Lightweight | ✅ ~9 MB, one universal package | ✅ | ⚠️ heavier per-webview decoder |
+| Security | 🔒 strict CSP, read-only, offline | varies | ⚠️ relaxed CSP |
+| Offline · no local server | ✅ | ⚠️ some run a server | ✅ |
+| Control bar (speed · PiP · fullscreen) | ✅ built-in | varies | varies |
+
+*"Converted on the fly" = a short one-time conversion (with a "Converting…" badge),
+not real-time HEVC decode — the trade for staying lightweight and keeping a strict
+security policy.*
 
 ## How it works
 
