@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.5] - 2026-06-29
+
+### Added
+- **Audio boost** — the volume slider now goes up to **200%**: drag past 100% (or
+  use `↑`) to amplify quiet videos, via a Web Audio gain stage. The level is
+  remembered.
+- **Loop** — a loop button in the control bar (and the `R` key) repeats the video;
+  the external audio stays in sync.
+- **Subtitle timing** — nudge subtitles earlier/later with `Z` / `X` (±0.5 s) to
+  line up out-of-sync downloaded `.srt`/`.vtt` files; a small hint shows the keys
+  when subtitles turn on.
+
+### Changed
+- Clearer wording in the listing/README about audio working out of the box (even
+  AAC), with zero setup — no `ffmpeg` to install, unlike most in-editor players.
+
 ## [0.8.4] - 2026-06-29
 
 ### Added

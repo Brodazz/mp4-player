@@ -611,10 +611,11 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
           <button id="playBtn" class="ic" title="Play / Pause (Space)" aria-label="Play / Pause"></button>
           <button id="backBtn" class="ic" title="Back 5s (←)" aria-label="Back 5 seconds"></button>
           <button id="fwdBtn" class="ic" title="Forward 5s (→)" aria-label="Forward 5 seconds"></button>
+          <button id="loopBtn" class="ic" title="Loop (R)" aria-label="Loop"></button>
           <span id="time" class="time">0:00 / 0:00</span>
           <span class="spacer"></span>
           <button id="muteBtn" class="ic" title="Mute (M)" aria-label="Mute"></button>
-          <input id="vol" class="vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" />
+          <input id="vol" class="vol" type="range" min="0" max="2" step="0.05" value="1" aria-label="Volume (drag past 100% to boost)" />
           <div class="speedWrap">
             <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)" aria-label="Playback speed">1×</button>
             <div id="speedMenu" class="speedmenu"></div>
@@ -656,6 +657,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const fsBtn = document.getElementById('fsBtn');
     const camBtn = document.getElementById('camBtn');
     const ccBtn = document.getElementById('ccBtn');
+    const loopBtn = document.getElementById('loopBtn');
 
     let audioReady = false;
     let useExternal = false;
@@ -677,7 +679,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       fsOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
       pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg>',
       cc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3" stroke-linecap="round"/></svg>',
-      cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3"/></svg>'
+      cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3"/></svg>',
+      loop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>'
     };
 
     playBtn.innerHTML = IC.play;
@@ -687,9 +690,38 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     pipBtn.innerHTML = IC.pip;
     fsBtn.innerHTML = IC.fsIn;
     camBtn.innerHTML = IC.cam;
+    loopBtn.innerHTML = IC.loop;
+    loopBtn.style.opacity = '0.5'; // off di default
     if (ccBtn) { ccBtn.innerHTML = IC.cc; }
     // Picture-in-Picture: nascondi il pulsante se il webview non lo supporta.
     if (!document.pictureInPictureEnabled) { pipBtn.style.display = 'none'; }
+
+    // --- Volume con boost fino al 200% (Web Audio GainNode sull'audio esterno) ---
+    let level = Math.max(0, Math.min(2, SAVED.volume)); // 0..2 (oltre 1 = boost)
+    let audioCtx = null;
+    let gainNode = null;
+    function ensureGain() {
+      if (gainNode || typeof AudioContext === 'undefined') { return; }
+      try {
+        audioCtx = new AudioContext();
+        const srcNode = audioCtx.createMediaElementSource(audio);
+        gainNode = audioCtx.createGain();
+        srcNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        gainNode.gain.value = Math.max(1, level);
+      } catch (e) { gainNode = null; }
+    }
+    function applyLevel(l) {
+      level = Math.max(0, Math.min(2, l));
+      const base = Math.min(1, level);
+      player.volume = base;
+      audio.volume = base;
+      if (gainNode) { gainNode.gain.value = Math.max(1, level); }
+      vol.value = String(level);
+      vol.style.backgroundSize = (level / 2 * 100) + '% 100%';
+      const muted = player.muted || level === 0;
+      muteBtn.innerHTML = muted ? IC.volOff : IC.volOn;
+    }
 
     const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
     RATES.forEach((r) => {
@@ -777,6 +809,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
 
     // --- Sincronizzazione audio esterno + aggiornamento UI della barra ---
     player.addEventListener('play', () => {
+      ensureGain();
+      if (audioCtx && audioCtx.state === 'suspended') { audioCtx.resume(); }
       if (useExternal) { syncTime(); audio.play().catch(() => {}); }
       playBtn.innerHTML = IC.pause;
       showBar();
@@ -802,13 +836,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       savePrefs();
     });
     player.addEventListener('volumechange', () => {
-      audio.volume = player.volume;
       audio.muted = player.muted;
-      const muted = player.muted || player.volume === 0;
+      const muted = player.muted || level === 0;
       muteBtn.innerHTML = muted ? IC.volOff : IC.volOn;
-      const v = player.muted ? 0 : player.volume;
-      vol.value = String(v);
-      vol.style.backgroundSize = (v * 100) + '% 100%';
       savePrefs();
     });
     player.addEventListener('timeupdate', () => {
@@ -835,7 +865,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       prefsTimer = setTimeout(() => {
         vscodeApi.postMessage({
           type: 'prefs',
-          volume: player.volume,
+          volume: level,
           muted: player.muted,
           speed: player.playbackRate,
         });
@@ -906,8 +936,16 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     muteBtn.addEventListener('click', () => { player.muted = !player.muted; });
     vol.addEventListener('input', () => {
       player.muted = false;
-      player.volume = parseFloat(vol.value);
+      applyLevel(parseFloat(vol.value));
+      savePrefs();
     });
+
+    // --- Loop ---  (l'audio esterno si risincronizza da solo via 'seeked' al rientro)
+    function toggleLoop() {
+      player.loop = !player.loop;
+      loopBtn.style.opacity = player.loop ? '1' : '0.5';
+    }
+    loopBtn.addEventListener('click', toggleLoop);
 
     // --- Velocità ---
     function setRate(r) {
@@ -1014,13 +1052,40 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       });
       ccTrack.mode = 'showing';
     }
+    function showSubHint() {
+      showStatus('Subtitles on · press Z / X to fix timing', false);
+      setTimeout(hideStatus, 2800);
+    }
     function toggleCC() {
       if (!ccTrack) { return; }
       ccOn = !ccOn;
       ccTrack.mode = ccOn ? 'showing' : 'hidden';
       if (ccBtn) { ccBtn.style.opacity = ccOn ? '1' : '0.5'; }
+      if (ccOn) { showSubHint(); }
     }
     if (ccBtn) { ccBtn.addEventListener('click', toggleCC); }
+    // I sottotitoli partono già attivi: mostra una volta l'hint sui tasti Z/X,
+    // ma solo quando il badge è libero (no "Preparing/Converting" in corso).
+    if (ccTrack) {
+      setTimeout(() => {
+        if (status.style.display === 'none') { showSubHint(); }
+      }, 2200);
+    }
+
+    // --- Delay sottotitoli (Z indietro / X avanti): ricrea i cue con offset ---
+    let subOffset = 0;
+    function shiftSubs(delta) {
+      if (!ccTrack) { return; }
+      subOffset = Math.round((subOffset + delta) * 10) / 10;
+      while (ccTrack.cues && ccTrack.cues.length) { ccTrack.removeCue(ccTrack.cues[0]); }
+      CUES.forEach((c) => {
+        const s = Math.max(0, c.start + subOffset);
+        const e = Math.max(s + 0.1, c.end + subOffset);
+        try { ccTrack.addCue(new VTTCue(s, e, c.text)); } catch (err) {}
+      });
+      showStatus('Subtitles ' + (subOffset >= 0 ? '+' : '') + subOffset.toFixed(1) + 's', false);
+      setTimeout(hideStatus, 1000);
+    }
 
     // --- Auto-hide della barra ---
     let hideTimer = null;
@@ -1048,7 +1113,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       e.preventDefault();
       player.muted = false;
       const step = e.deltaY < 0 ? 0.05 : -0.05;
-      player.volume = Math.min(1, Math.max(0, player.volume + step));
+      applyLevel(level + step);
+      savePrefs();
     }, { passive: false });
     bar.addEventListener('mouseenter', cancelHide);
     bar.addEventListener('mouseleave', () => { if (!player.paused) { scheduleHide(); } });
@@ -1072,16 +1138,21 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         case 'ArrowUp':
           e.preventDefault();
           player.muted = false;
-          player.volume = Math.min(1, player.volume + 0.1);
+          applyLevel(level + 0.1);
+          savePrefs();
           break;
         case 'ArrowDown':
           e.preventDefault();
-          player.volume = Math.max(0, player.volume - 0.1);
+          applyLevel(level - 0.1);
+          savePrefs();
           break;
         case 'f': toggleFs(); break;
         case 'p': togglePip(); break;
         case 's': captureFrame(); break;
         case 'c': toggleCC(); break;
+        case 'r': toggleLoop(); break;
+        case 'z': shiftSubs(-0.5); break;
+        case 'x': shiftSubs(0.5); break;
         case 'm': player.muted = !player.muted; break;
         case '>':
           e.preventDefault();
@@ -1096,8 +1167,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
 
     // Stato iniziale: applica volume/velocità salvati (gli handler sincronizzano
     // slider, icone e audio); la posizione si riprende a 'loadedmetadata'.
-    player.volume = SAVED.volume;
     player.muted = SAVED.muted;
+    applyLevel(SAVED.volume);
     setRate(SAVED.speed);
     reflectRate();
     updateTime();

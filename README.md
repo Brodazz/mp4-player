@@ -33,11 +33,11 @@ box** — while staying a **single, lightweight, secure, fully offline** extensi
 with a strict CSP and no local server. You get the format coverage of the heavy
 players without giving up the things that made the simple ones safe.
 
-- 🔊 **Real audio** on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV, F4V & WebM — even AAC (and Opus/Vorbis), which VS Code can't decode on its own
+- 🔊 **Real audio, out of the box** — even **AAC** (plus AC-3, Opus, Vorbis), which the VS Code engine can't decode on its own, so most in-editor players show your MP4/MKV **silently**. Here it just plays, with sound — on MP4, MKV, MOV, M4V, AVI, M2TS/MTS, FLV, F4V & WebM
 - 🎬 **HEVC / H.265 and WebM (VP9/VP8) too** — converted to H.264 on the fly, since VS Code can't decode them natively
 - ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
 - 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
-- 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), volume, Picture-in-Picture, fullscreen
+- 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), **audio boost to 200%**, **loop**, Picture-in-Picture, fullscreen
 - 📝 **Subtitles, zero config** — drop a `.srt`/`.vtt` with the same name next to the video and it just appears (SRT is converted on the fly); toggle with `C`
 - 📸 **Grab a frame, paste anywhere** — `S` captures the current frame so you can **Copy** it straight into a chat with your AI assistant, an issue or a doc — or **Save** it as a PNG. No screenshot tool, no leaving VS Code
 - 💾 **Remembers** your volume, speed and **resume position** per file
@@ -87,13 +87,14 @@ decode), it is converted to H.264 on the fly instead of just repackaged.
 - Open a `.mp4`, `.mov`, `.m4v`, `.mkv`, `.avi`, `.m2ts`, `.mts`, `.flv`, `.f4v` or `.webm` file from the Explorer: the player starts.
 - To place code and video side by side, use the editor split (`Ctrl+\` or drag the tab).
 - A **custom control bar** appears at the bottom of the player on mouse move
-  (play/pause, seekable timeline, time, volume, playback speed, Picture-in-Picture,
-  fullscreen) and fades out during playback. Keyboard shortcuts work too (see below).
+  (play/pause, seekable timeline, time, volume **with boost to 200%**, playback
+  speed, loop, Picture-in-Picture, fullscreen) and fades out during playback.
+  Keyboard shortcuts work too (see below).
 - **Subtitles, zero config**: drop a `.srt` (or `.vtt`) file with the **same name**
   next to the video and it loads automatically — no menus, no import step. SRT is
   converted to WebVTT on the fly and the cues are injected directly into the player
   (so VS Code's strict security policy never blocks them). Toggle with the `CC`
-  button or `C`.
+  button or `C`; if a downloaded subtitle is out of sync, nudge it with `Z` / `X`.
 - **Capture a frame**: press `S` (or the camera button) to grab the current frame,
   then **Copy** it to the clipboard or **Save** it as a PNG. *Copy* is the handy
   one: paste the still straight into a chat with your AI assistant, a bug report or
@@ -105,12 +106,14 @@ decode), it is converted to H.264 on the fly instead of just repackaged.
 |---|---|
 | `Space` / `K` | Play / Pause |
 | `←` / `→` | Back / Forward 5s |
-| `↑` / `↓` | Volume up / down |
+| `↑` / `↓` | Volume up / down (up to 200%) |
 | `<` / `>` | Slower / Faster (0.25×–2×) |
 | `M` | Mute |
+| `R` | Loop on/off |
 | `P` | Picture-in-Picture |
 | `S` | Capture frame (copy or save as PNG) |
 | `C` | Subtitles on/off |
+| `Z` / `X` | Nudge subtitles earlier / later (±0.5s) |
 | `F` | Fullscreen |
 
 ## Development
