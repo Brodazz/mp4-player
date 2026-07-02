@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.6] - 2026-06-29
+
+### Changed
+- Shortened the Marketplace description so it no longer gets cut off mid-sentence in
+  the listing header (no functional changes).
+
 ## [0.8.5] - 2026-06-29
 
 ### Added
