@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.7] - 2026-07-07
+
+### Added
+- **Keyboard shortcuts overlay** — press `?` (or the new button in the control bar)
+  to see every shortcut at a glance: play/pause, seek, frame stepping, volume/boost,
+  speed, loop, subtitles, capture and more.
+- **Frame-by-frame stepping** — with the video paused, `,` and `.` step one frame
+  back/forward, handy together with frame capture.
+
+### Changed
+- **Refreshed control bar** — a floating "glass" panel (blur, rounded corners, soft
+  shadow), a timeline that grows on hover with a ring-style handle, smoother icon
+  hovers and a brand-accent play button. Purely visual; all controls behave the same.
+
 ## [0.8.6] - 2026-06-29
 
 ### Changed

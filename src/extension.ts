@@ -381,15 +381,17 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       display: none;
       position: absolute;
       left: 50%;
-      bottom: 72px;
+      bottom: 92px;
       transform: translateX(-50%);
       align-items: center;
       gap: 8px;
       padding: 8px 10px;
-      background: rgba(28, 28, 28, 0.96);
+      background: rgba(24, 24, 28, 0.9);
+      backdrop-filter: blur(16px) saturate(140%);
+      -webkit-backdrop-filter: blur(16px) saturate(140%);
       border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
       z-index: 9;
       font-family: var(--vscode-font-family, sans-serif);
     }
@@ -408,44 +410,62 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       background: var(--vscode-button-secondaryHoverBackground, #45494e);
     }
 
-    /* Barra di controlli custom, a comparsa */
+    /* Barra di controlli custom, a comparsa (pannello "glass" flottante) */
     .bar {
       position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 4px 12px 10px;
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      padding: 2px 12px 8px;
+      background: rgba(22, 22, 26, 0.55);
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 14px;
+      box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
       font-family: var(--vscode-font-family, sans-serif);
       color: #fff;
       opacity: 1;
-      transition: opacity 0.25s ease;
+      transform: translateY(0);
+      transition: opacity 0.28s ease, transform 0.28s ease;
       z-index: 5;
       user-select: none;
     }
-    .bar.hidden { opacity: 0; pointer-events: none; }
-    .row { display: flex; align-items: center; gap: 4px; }
+    .bar.hidden { opacity: 0; transform: translateY(8px); pointer-events: none; }
+    .row { display: flex; align-items: center; gap: 2px; }
     .ic {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
+      width: 34px;
+      height: 34px;
       padding: 0;
       background: transparent;
       border: none;
-      color: #fff;
+      color: #eaeaea;
       cursor: pointer;
-      border-radius: 4px;
+      border-radius: 8px;
+      transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
     }
-    .ic:hover { background: rgba(255, 255, 255, 0.18); }
+    .ic:hover { background: rgba(255, 255, 255, 0.14); color: #fff; transform: translateY(-1px); }
+    .ic:active { transform: translateY(0) scale(0.92); }
     .ic svg { width: 20px; height: 20px; display: block; }
+    /* Play in evidenza con l'accento del brand */
+    #playBtn:hover { background: rgba(232, 78, 78, 0.92); color: #fff; }
     .time {
       font-size: 12px;
-      color: #eee;
-      margin: 0 8px;
+      color: #dcdcdc;
+      margin: 0 10px;
       font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
       white-space: nowrap;
+    }
+    .sep {
+      width: 1px;
+      height: 20px;
+      margin: 0 6px;
+      background: rgba(255, 255, 255, 0.14);
+      flex: none;
     }
     .spacer { flex: 1; }
 
@@ -454,26 +474,31 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
-      height: 4px;
-      margin: 4px 0 8px;
+      height: 5px;
+      margin: 8px 0 6px;
       padding: 0;
-      border-radius: 2px;
+      border-radius: 3px;
       cursor: pointer;
-      background-color: rgba(255, 255, 255, 0.25);
-      background-image: linear-gradient(#e84e4e, #e84e4e);
+      background-color: rgba(255, 255, 255, 0.22);
+      background-image: linear-gradient(90deg, #e84e4e, #ff6b6b);
       background-size: 0% 100%;
       background-repeat: no-repeat;
+      transition: height 0.15s ease;
     }
+    .seek:hover { height: 7px; }
     .seek::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 13px;
-      height: 13px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
-      background: #e84e4e;
+      background: #fff;
       border: none;
+      box-shadow: 0 0 0 4px rgba(232, 78, 78, 0.35);
       cursor: pointer;
+      transition: transform 0.12s ease;
     }
+    .seek:hover::-webkit-slider-thumb { transform: scale(1.15); }
 
     /* Volume */
     .vol {
@@ -503,27 +528,31 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     /* Velocità */
     .speedWrap { position: relative; }
     .speedbtn {
-      background: transparent;
-      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       color: #fff;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
-      padding: 6px 8px;
-      border-radius: 4px;
-      min-width: 40px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      min-width: 42px;
+      transition: background 0.15s ease;
     }
     .speedbtn:hover { background: rgba(255, 255, 255, 0.18); }
     .speedmenu {
       display: none;
       position: absolute;
-      bottom: 40px;
+      bottom: 44px;
       right: 0;
-      background: rgba(28, 28, 28, 0.97);
+      background: rgba(24, 24, 28, 0.9);
+      backdrop-filter: blur(16px) saturate(140%);
+      -webkit-backdrop-filter: blur(16px) saturate(140%);
       border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 6px;
-      padding: 4px;
-      min-width: 66px;
+      border-radius: 10px;
+      padding: 5px;
+      min-width: 70px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     }
     .speedmenu.open { display: block; }
     .speedmenu button {
@@ -581,6 +610,60 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Overlay scorciatoie da tastiera (tasto ?) */
+    .help {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      font-family: var(--vscode-font-family, sans-serif);
+    }
+    .help.open { display: flex; }
+    .help-card {
+      background: rgba(26, 26, 30, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+      padding: 22px 26px;
+      max-width: 440px;
+      width: calc(100% - 64px);
+      color: #eee;
+    }
+    .help-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .help-title .dot { color: #e84e4e; font-size: 18px; }
+    .help-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 9px 16px;
+      font-size: 12.5px;
+      align-items: center;
+    }
+    .help-grid .k {
+      justify-self: start;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 11.5px;
+      white-space: nowrap;
+    }
+    .help-grid .d { color: #cfcfcf; }
+    .help-hint { margin: 18px 0 0; font-size: 11px; color: #8f8f8f; text-align: center; }
+
     .ic:focus-visible, .speedbtn:focus-visible, .seek:focus-visible,
     .vol:focus-visible, .speedmenu button:focus-visible {
       outline: 2px solid var(--vscode-focusBorder, #0a84ff);
@@ -620,10 +703,19 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
             <button id="speedBtn" class="speedbtn" title="Playback speed (&lt; &gt;)" aria-label="Playback speed">1×</button>
             <div id="speedMenu" class="speedmenu"></div>
           </div>
+          <span class="sep"></span>
           ${cues.length ? `<button id="ccBtn" class="ic" title="Subtitles (C)" aria-label="Subtitles"></button>` : ''}
           <button id="camBtn" class="ic" title="Capture frame (S)" aria-label="Capture frame"></button>
           <button id="pipBtn" class="ic" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture"></button>
           <button id="fsBtn" class="ic" title="Fullscreen (F)" aria-label="Fullscreen"></button>
+          <button id="helpBtn" class="ic" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"></button>
+        </div>
+      </div>
+      <div id="help" class="help" role="dialog" aria-label="Keyboard shortcuts">
+        <div class="help-card">
+          <div class="help-title"><span class="dot">⌨</span> Keyboard shortcuts</div>
+          <div id="helpGrid" class="help-grid"></div>
+          <div class="help-hint">Press ? or Esc to close</div>
         </div>
       </div>
     </div>
@@ -658,6 +750,9 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     const camBtn = document.getElementById('camBtn');
     const ccBtn = document.getElementById('ccBtn');
     const loopBtn = document.getElementById('loopBtn');
+    const helpBtn = document.getElementById('helpBtn');
+    const help = document.getElementById('help');
+    const helpGrid = document.getElementById('helpGrid');
 
     let audioReady = false;
     let useExternal = false;
@@ -680,7 +775,8 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       pip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg>',
       cc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3" stroke-linecap="round"/></svg>',
       cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3"/></svg>',
-      loop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>'
+      loop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+      help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.3c-0.8 0.4-1 0.9-1 1.6" stroke-linecap="round"/><circle cx="12" cy="16.6" r="0.6" fill="currentColor" stroke="none"/></svg>'
     };
 
     playBtn.innerHTML = IC.play;
@@ -692,6 +788,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     camBtn.innerHTML = IC.cam;
     loopBtn.innerHTML = IC.loop;
     loopBtn.style.opacity = '0.5'; // off di default
+    helpBtn.innerHTML = IC.help;
     if (ccBtn) { ccBtn.innerHTML = IC.cc; }
     // Picture-in-Picture: nascondi il pulsante se il webview non lo supporta.
     if (!document.pictureInPictureEnabled) { pipBtn.style.display = 'none'; }
@@ -1087,6 +1184,47 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       setTimeout(hideStatus, 1000);
     }
 
+    // --- Avanzamento frame-by-frame (, indietro / . avanti), a video in pausa ---
+    const FRAME = 1 / 30; // passo di default (~30 fps: il webview non espone gli fps reali)
+    function stepFrame(dir) {
+      player.pause();
+      const d = player.duration || 0;
+      player.currentTime = Math.max(0, Math.min(d, player.currentTime + dir * FRAME));
+      showStatus(dir < 0 ? '◄ Frame' : 'Frame ►', false);
+      setTimeout(hideStatus, 700);
+      showBar();
+    }
+
+    // --- Overlay scorciatoie (tasto ?) ---
+    const SHORTCUTS = [
+      ['Space / K', 'Play / pause'],
+      ['← / →', 'Skip 5s back / forward'],
+      [', / .', 'Previous / next frame (paused)'],
+      ['↑ / ↓', 'Volume up / down (boost to 200%)'],
+      ['< / >', 'Slower / faster'],
+      ['M', 'Mute'],
+      ['R', 'Loop'],
+      ['S', 'Capture frame'],
+    ];
+    if (document.pictureInPictureEnabled) { SHORTCUTS.push(['P', 'Picture-in-Picture']); }
+    SHORTCUTS.push(['F', 'Fullscreen']);
+    if (CUES && CUES.length) {
+      SHORTCUTS.push(['C', 'Toggle subtitles']);
+      SHORTCUTS.push(['Z / X', 'Subtitle timing − / +']);
+    }
+    SHORTCUTS.push(['?', 'This help']);
+    SHORTCUTS.forEach(([k, d]) => {
+      const kEl = document.createElement('span'); kEl.className = 'k'; kEl.textContent = k;
+      const dEl = document.createElement('span'); dEl.className = 'd'; dEl.textContent = d;
+      helpGrid.appendChild(kEl); helpGrid.appendChild(dEl);
+    });
+    function toggleHelp() {
+      help.classList.toggle('open');
+      if (help.classList.contains('open')) { showBar(); cancelHide(); }
+    }
+    helpBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleHelp(); });
+    help.addEventListener('click', (e) => { if (e.target === help) { help.classList.remove('open'); } });
+
     // --- Auto-hide della barra ---
     let hideTimer = null;
     function showBar() {
@@ -1124,9 +1262,10 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       if (e.target && e.target.tagName === 'INPUT') { return; }
       switch (e.key) {
         case 'Escape':
-          // Chiude i menù a comparsa (velocità / cattura) se aperti.
+          // Chiude i menù a comparsa (velocità / cattura / scorciatoie) se aperti.
           speedMenu.classList.remove('open');
           if (capMenu) { capMenu.classList.remove('open'); }
+          help.classList.remove('open');
           break;
         case ' ':
         case 'k':
@@ -1161,6 +1300,12 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
         case '<':
           e.preventDefault();
           setRate(player.playbackRate - 0.25);
+          break;
+        case ',': stepFrame(-1); break;
+        case '.': stepFrame(1); break;
+        case '?':
+          e.preventDefault();
+          toggleHelp();
           break;
       }
     });

@@ -37,7 +37,7 @@ players without giving up the things that made the simple ones safe.
 - 🎬 **HEVC / H.265 and WebM (VP9/VP8) too** — converted to H.264 on the fly, since VS Code can't decode them natively
 - ⚡ **Zero setup** — `ffmpeg` is bundled; nothing to install
 - 🔒 **Secure & offline** — no network, no local server, read-only editor, strict CSP
-- 🎛️ **Modern control bar** — seekable timeline, speed (0.25×–2×), **audio boost to 200%**, **loop**, Picture-in-Picture, fullscreen
+- 🎛️ **Modern control bar** — a floating glass panel with a seekable timeline, speed (0.25×–2×), **audio boost to 200%**, **loop**, **frame-by-frame** (`,`/`.`), Picture-in-Picture, fullscreen, and a **shortcuts overlay** (`?`)
 - 📝 **Subtitles, zero config** — drop a `.srt`/`.vtt` with the same name next to the video and it just appears (SRT is converted on the fly); toggle with `C`
 - 📸 **Grab a frame, paste anywhere** — `S` captures the current frame so you can **Copy** it straight into a chat with your AI assistant, an issue or a doc — or **Save** it as a PNG. No screenshot tool, no leaving VS Code
 - 💾 **Remembers** your volume, speed and **resume position** per file
@@ -106,6 +106,7 @@ decode), it is converted to H.264 on the fly instead of just repackaged.
 |---|---|
 | `Space` / `K` | Play / Pause |
 | `←` / `→` | Back / Forward 5s |
+| `,` / `.` | Previous / next frame (when paused) |
 | `↑` / `↓` | Volume up / down (up to 200%) |
 | `<` / `>` | Slower / Faster (0.25×–2×) |
 | `M` | Mute |
@@ -115,6 +116,9 @@ decode), it is converted to H.264 on the fly instead of just repackaged.
 | `C` | Subtitles on/off |
 | `Z` / `X` | Nudge subtitles earlier / later (±0.5s) |
 | `F` | Fullscreen |
+| `?` | Show this shortcut list in the player |
+
+> Tip: press `?` inside the player to see all shortcuts at any time.
 
 ## Development
 

@@ -2,7 +2,7 @@
   "name": "mp4-player",
   "displayName": "Modern Video Player — with Audio (MP4, MKV, HEVC, WebM)",
   "description": "Play videos with sound in a VS Code tab — real audio out of the box (even AAC), zero setup, no ffmpeg to install. MP4, MKV, MOV, AVI, WebM and HEVC/H.265, video and audio, fully offline. ffmpeg bundled as WebAssembly.",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "license": "MIT",
   "publisher": "Brodazz",
   "icon": "assets/icon.png",
