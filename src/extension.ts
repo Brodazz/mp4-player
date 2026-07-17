@@ -500,6 +500,25 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
     }
     .seek:hover::-webkit-slider-thumb { transform: scale(1.15); }
 
+    /* Tooltip orario sulla timeline (segue il mouse sopra la seek) */
+    .seektip {
+      position: absolute;
+      display: none;
+      padding: 2px 7px;
+      background: rgba(20, 20, 24, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+      white-space: nowrap;
+      transform: translate(-50%, -140%);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      z-index: 6;
+    }
+    .seektip.show { display: block; }
+
     /* Volume */
     .vol {
       -webkit-appearance: none;
@@ -690,6 +709,7 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       </div>
       <div id="bar" class="bar">
         <input id="seek" class="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" />
+        <div id="seekTip" class="seektip" aria-hidden="true"></div>
         <div class="row">
           <button id="playBtn" class="ic" title="Play / Pause (Space)" aria-label="Play / Pause"></button>
           <button id="backBtn" class="ic" title="Back 5s (←)" aria-label="Back 5 seconds"></button>
@@ -1014,6 +1034,24 @@ class Mp4EditorProvider implements vscode.CustomReadonlyEditorProvider {
       seek.style.backgroundSize = pct + '% 100%';
     });
     seek.addEventListener('change', () => { seeking = false; });
+
+    // --- Tooltip orario: sopra la timeline, segue il mouse ---
+    const seekTip = document.getElementById('seekTip');
+    function updateSeekTip(e) {
+      const d = player.duration || 0;
+      if (!d) { return; }
+      const rect = seek.getBoundingClientRect();
+      const barRect = bar.getBoundingClientRect();
+      let frac = (e.clientX - rect.left) / rect.width;
+      frac = Math.max(0, Math.min(1, frac));
+      seekTip.textContent = fmt(frac * d);
+      seekTip.style.left = (rect.left - barRect.left + frac * rect.width) + 'px';
+      seekTip.style.top = (rect.top - barRect.top) + 'px';
+      seekTip.classList.add('show');
+    }
+    seek.addEventListener('mousemove', updateSeekTip);
+    seek.addEventListener('mouseenter', updateSeekTip);
+    seek.addEventListener('mouseleave', () => seekTip.classList.remove('show'));
 
     // --- Pulsanti ---
     function togglePlay() { player.paused ? player.play() : player.pause(); }

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.8] - 2026-07-17
+
+### Added
+- **Timeline time tooltip** — hover over the progress bar to see the exact timestamp
+  at that position (e.g. `1:24`) before you click, so scrubbing to a precise moment
+  is easy.
+
 ## [0.8.7] - 2026-07-07
 
 ### Added
